@@ -21,6 +21,10 @@ appsettings.Staging.json
 .vs/
 .idea/
 
+# ไฟล์ที่เครื่องมือฝั่ง frontend หลงมาสร้างไว้ในโฟลเดอร์นี้ ไม่ใช่ของโปรเจค .NET
+node_modules/
+package-lock.json
+
 # certificate / private key
 *.pfx
 *.p12
