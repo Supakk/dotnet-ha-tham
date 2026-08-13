@@ -1,6 +1,158 @@
-@Mammod_BackEnd_HostAddress = http://localhost:5080
+@host = http://localhost:5080
 
-GET {{Mammod_BackEnd_HostAddress}}/weatherforecast/
-Accept: application/json
+### ยิงทดสอบได้เลยจาก VS Code (ติดตั้ง extension "REST Client")
+### กด "Send Request" ที่ขึ้นเหนือแต่ละบล็อก — เร็วกว่าเปิด Swagger เวลาจะไล่ทั้งเส้นทาง
+
+### ── 1 · เข้าสู่ระบบ ───────────────────────────────────────────────────────
+# @name login
+POST {{host}}/auth/login
+Content-Type: application/json
+
+{ "email": "tms@mammod.co", "password": "อะไรก็ได้ ยังไม่ได้ตรวจ" }
 
 ###
+@token = {{login.response.body.accessToken}}
+
+### ใครคือเจ้าของ token นี้
+GET {{host}}/auth/me
+Authorization: Bearer {{token}}
+
+### ── 2 · ดูของตั้งต้น ─────────────────────────────────────────────────────
+
+### คิวรอจัดแผน — ใบสั่งส่งที่ยังไม่ถูกจัด
+GET {{host}}/manifests/pending-stops
+
+### ใบปิดบรรทุกทั้งหมด (มีใบละสถานะ ครบทั้ง 5 ขั้นของจอติดตามสถานะ)
+GET {{host}}/manifests
+
+### บันทึกการเชื่อมต่อ — มีแค่ OMS ขาเข้า และ MMX ขาออก
+GET {{host}}/integration/messages
+
+### ── 3 · เส้นทางหลัก: แผน → ใบปิดบรรทุก → ยืนยัน → ส่ง MMX ─────────────────
+
+# @name plan
+POST {{host}}/transport-plans
+Content-Type: application/json
+
+{
+  "warehouseCode": "WSK",
+  "deliveryDate": "2026-08-09",
+  "deliveryZoneId": "zone-1",
+  "note": "รอบเช้า สายเหนือ"
+}
+
+###
+@planId = {{plan.response.body.id}}
+
+### ติ๊กใบสั่งส่งเข้าแผน — ของจะหายจากคิวทันที (ลอง GET pending-stops ซ้ำดู)
+PUT {{host}}/transport-plans/{{planId}}/stops
+Content-Type: application/json
+
+{ "stopIds": ["s-1", "s-2"] }
+
+### ออกใบปิดบรรทุก — ได้ใบร่างที่ "ยังไม่มีรถ" ตามที่ตั้งใจ
+# @name issue
+POST {{host}}/transport-plans/{{planId}}/issue
+
+###
+@manifestId = {{issue.response.body.manifest.id}}
+
+### ยืนยันทั้งที่ยังไม่มีรถ — ต้องถูกปฏิเสธ 400 พร้อมเหตุผลภาษาไทย
+POST {{host}}/manifests/{{manifestId}}/confirm
+
+### ระบุรถ คนขับ สายส่ง (ค่าอื่นต้องส่งมาครบ เพราะ PUT คือแทนที่ทั้งใบ)
+### ดูใบเต็ม ๆ ได้จาก GET /manifests แล้วก๊อปมาแก้
+PUT {{host}}/manifests/{{manifestId}}
+Content-Type: application/json
+
+{
+  "warehouseCode": "WSK",
+  "createdBy": "admin : Next",
+  "deliveryDate": "2026-08-09",
+  "driverId": "dr-1",
+  "driverName": "สมศักดิ์ ขยันส่ง",
+  "driverPhone": "081-234-5678",
+  "plateHead": "70-9012 นนทบุรี",
+  "plateTrailer": "71-3344 นนทบุรี",
+  "vehicle": "10-wheel",
+  "assistantCount": 2,
+  "maxPayloadKg": 15000,
+  "maxVolumeCbm": 35,
+  "carrierId": "cr-1",
+  "carrier": "Fleet อินเฮาส์ (คลังบางบัวทอง)",
+  "routeId": "rt-1",
+  "routeCode": "RT-NORTH-01",
+  "routeName": "สายเหนือ (นครสวรรค์ - พิษณุโลก)",
+  "origin": { "name": "DC นนทบุรี", "position": [13.8591, 100.5217] },
+  "dock": "Dock 1",
+  "sealNo": "SL-0001",
+  "pricing": { "tripPrice": 8000, "priceAdd": 500, "priceDeduct": 200, "freightNote": "รอคิว 1 ชม." },
+  "stops": [
+    { "id": "s-1", "doNo": "DO-2026-0801", "soNo": "SO-9910231", "pickNo": "PKL-2026-0801",
+      "pickDate": "2026-07-28", "warehouseCode": "WSK", "deliveryZoneId": "zone-1",
+      "customer": "บจก. นครสวรรค์การค้า", "address": "อ.เมือง จ.นครสวรรค์", "deliverTo": "",
+      "boxes": 150, "weight": 3000, "cbm": 10.5, "cod": 0, "dueDate": "2026-07-31",
+      "status": "pending", "position": [15.7047, 100.1372] }
+  ]
+}
+
+### สังเกต: freightCost ที่ตอบกลับ = 8000 + 500 - 200 = 8300 (เซิร์ฟเวอร์คิดเอง)
+### และ colour ยังเป็นสีเดิมที่ตอนสร้างแจกไว้ ไม่เปลี่ยนตามที่ส่งมา
+
+### คราวนี้ยืนยันได้แล้ว
+POST {{host}}/manifests/{{manifestId}}/confirm
+
+### ส่งให้ MMX — เอกสารล็อก แก้ไขต่อไม่ได้ และมีแถวใหม่โผล่ใน integration log
+POST {{host}}/manifests/{{manifestId}}/send
+
+### ลองแก้หลังส่งแล้ว — ต้องถูกปฏิเสธ
+PUT {{host}}/manifests/{{manifestId}}
+Content-Type: application/json
+
+{ "stops": [] }
+
+### สถานะที่ OMS แจ้งกลับ (แทน webhook ที่ยังไม่มี)
+POST {{host}}/manifests/{{manifestId}}/status
+Content-Type: application/json
+
+{ "outcome": "completed", "message": "OMS ยืนยันการจัดส่งครบถ้วน" }
+
+### ── 4 · มาสเตอร์ ─────────────────────────────────────────────────────────
+
+GET {{host}}/warehouses
+
+###
+GET {{host}}/delivery-zones
+
+###
+GET {{host}}/routes
+
+###
+GET {{host}}/carriers
+
+###
+GET {{host}}/fleet-vehicles
+
+###
+GET {{host}}/drivers
+
+###
+GET {{host}}/geo/provinces
+
+###
+GET {{host}}/geo/districts?province=20
+
+### ลองสร้างผู้ให้บริการรหัสซ้ำ — ต้องถูกปฏิเสธ
+POST {{host}}/carriers
+Content-Type: application/json
+
+{ "id": "", "code": "CR-001", "name": "ทดสอบรหัสซ้ำ", "type": "subcontract",
+  "contactName": "", "phone": "", "email": "", "taxId": "", "active": true }
+
+### ── 5 · ค่าเชื่อมต่อระบบ ─────────────────────────────────────────────────
+
+### สังเกตว่า secret ตอบกลับมาเป็น ••••9f3a ไม่ใช่ค่าจริง
+GET {{host}}/integrations/configs
+
+###
+POST {{host}}/integrations/configs/mmx/test
