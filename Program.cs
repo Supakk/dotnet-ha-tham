@@ -4,6 +4,7 @@ using Mammod.Data;
 using Mammod.Middleware;
 using Mammod.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -32,7 +33,11 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddSingleton<TmsStore>();
 builder.Services.AddSingleton<DeliveryOrderStore>();
 builder.Services.AddSingleton<IntegrationConfigStore>();
-builder.Services.AddSingleton<TokenService>();
+// หากุญแจตรงนี้ ตอน startup ไม่ใช่ปล่อยให้ DI ไปหาตอนมี request แรก — เซิร์ฟเวอร์ที่
+// ตั้งค่าไม่ครบต้องไม่ขึ้น ดีกว่าขึ้นแล้วพังตอนคนแรกกด login
+var tokenService = new TokenService(
+    JwtKey.Resolve(builder.Configuration, builder.Environment), builder.Configuration);
+builder.Services.AddSingleton(tokenService);
 
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
@@ -56,11 +61,29 @@ builder.Services.AddCors(options =>
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
-        var tokens = new TokenService(builder.Configuration);
-        options.TokenValidationParameters = tokens.ValidationParameters();
+        // ตัวเดียวกับที่ลงทะเบียนไว้ข้างบน — ถ้าสร้างใหม่ตรงนี้ ตอน dev จะได้กุญแจคนละอัน
+        // กับที่ใช้เซ็น แล้ว token ที่เพิ่งออกให้จะ validate ไม่ผ่านทันที
+        options.TokenValidationParameters = tokenService.ValidationParameters();
     });
 
-builder.Services.AddAuthorization();
+// ประตูหลัก: นอก Development ทุก endpoint ต้องมี token ที่ถูกต้อง เว้นแต่จะติด
+// [AllowAnonymous] ไว้เอง (มีแค่ login กับ refresh)
+//
+// ตั้งเป็น fallback policy แทนการไปแปะ [Authorize] ทีละ controller เพราะแบบนั้น
+// ลืมได้ — และ endpoint ที่ลืมแปะจะเปิดโล่งโดยไม่มีอะไรเตือน แบบนี้ค่าเริ่มต้นคือปิด
+// แล้วต้องตั้งใจเปิดเป็นราย ๆ ไป ซึ่งเป็นทางที่พลาดแล้วปลอดภัยกว่า
+var requireAuth = builder.Configuration.GetValue("Auth:RequireAuthentication", false)
+    || !builder.Environment.IsDevelopment();
+
+builder.Services.AddAuthorization(options =>
+{
+    if (requireAuth)
+    {
+        options.FallbackPolicy = new AuthorizationPolicyBuilder(JwtBearerDefaults.AuthenticationScheme)
+            .RequireAuthenticatedUser()
+            .Build();
+    }
+});
 
 var app = builder.Build();
 

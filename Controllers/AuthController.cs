@@ -74,6 +74,9 @@ public sealed class AuthController(TokenService tokens, IWebHostEnvironment env)
         };
     }
 
+    // ต้องเข้าถึงได้โดยไม่มี token — มันคือที่ที่ token ถูกออกให้ ถ้าบังคับ auth
+    // ตรงนี้ด้วยก็จะไม่มีใคร login ได้เลย
+    [AllowAnonymous]
     [HttpPost("login")]
     public ActionResult<Session> Login([FromBody] Credentials body)
     {
@@ -90,6 +93,9 @@ public sealed class AuthController(TokenService tokens, IWebHostEnvironment env)
     /// <c>{ accessToken }</c> — the exact shape <c>refreshAccessToken</c> in
     /// <c>apiClient.ts</c> destructures.
     /// </summary>
+    // เช่นกัน — จุดประสงค์ของมันคือใช้ตอน access token หมดอายุแล้ว ตัวที่ยืนยันตัวตน
+    // ที่นี่คือ cookie ไม่ใช่ header
+    [AllowAnonymous]
     [HttpPost("refresh")]
     public ActionResult<object> Refresh()
     {
@@ -130,6 +136,7 @@ public sealed class AuthController(TokenService tokens, IWebHostEnvironment env)
     /// a failed sign-out must not trap someone in a session they have left — so
     /// this always succeeds.
     /// </summary>
+    [AllowAnonymous]
     [HttpPost("logout")]
     public IActionResult Logout()
     {

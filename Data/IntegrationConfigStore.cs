@@ -95,10 +95,17 @@ public sealed class IntegrationConfigStore
     private static string Mask(string value) =>
         $"••••{(value.Length <= 4 ? value : value[^4..])}";
 
+    /// <summary>
+    /// ค่าตั้งต้นแบบสมมติ มีไว้ให้หน้าจอมีอะไรแสดงว่า "secret ที่บันทึกไว้แล้ว" หน้าตาเป็นยังไง
+    ///
+    /// ตั้งชื่อให้อ่านแล้วรู้ทันทีว่าไม่ใช่ของจริง เพราะ repo นี้เป็นสาธารณะ — ค่าที่หน้าตา
+    /// เหมือน key จริงจะทำให้ทั้งเครื่องมือสแกน secret และคนที่มาอ่านโค้ดเสียเวลาไปตรวจสอบ
+    /// และที่แย่กว่านั้นคือทำให้ชินกับการเห็น key ปนอยู่ในโค้ด
+    /// </summary>
     private readonly Dictionary<string, string> _secrets = new()
     {
-        ["oms:clientSecret"] = "s3cr3t-oms-9f3a",
-        ["mmx:apiKey"] = "mmx-live-key-77b2",
+        ["oms:clientSecret"] = "EXAMPLE-NOT-A-REAL-SECRET-0001",
+        ["mmx:apiKey"] = "EXAMPLE-NOT-A-REAL-SECRET-0002",
     };
 
     private List<IntegrationConfig> _configs;
@@ -117,7 +124,7 @@ public sealed class IntegrationConfigStore
                     ["baseUrl"] = "https://oms.kmto.local/api",
                     ["tenant"] = "MAMMOD",
                     ["clientId"] = "tms-mammod",
-                    ["clientSecret"] = Mask("s3cr3t-oms-9f3a"),
+                    ["clientSecret"] = Mask("EXAMPLE-NOT-A-REAL-SECRET-0001"),
                     ["callbackToken"] = "",
                 },
                 MaskedFields = ["clientSecret"],
@@ -134,7 +141,7 @@ public sealed class IntegrationConfigStore
                 Values = new()
                 {
                     ["endpointUrl"] = "https://mmx.local/manifest",
-                    ["apiKey"] = Mask("mmx-live-key-77b2"),
+                    ["apiKey"] = Mask("EXAMPLE-NOT-A-REAL-SECRET-0002"),
                     ["senderCode"] = "MAMMOD-TH",
                 },
                 MaskedFields = ["apiKey"],

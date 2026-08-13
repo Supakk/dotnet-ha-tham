@@ -19,10 +19,15 @@ namespace Mammod.Services;
 /// <c>POST /auth/refresh</c> with <c>withCredentials</c> so the browser attaches
 /// that cookie, and retries the original request once.
 /// </summary>
-public sealed class TokenService(IConfiguration config)
+/// <param name="key">
+/// รับกุญแจเข้ามา ไม่ไปอ่าน config เอง — เพื่อให้ <c>Program.cs</c> เป็นคนหามันตั้งแต่
+/// ตอน startup ถ้าปล่อยให้คลาสนี้อ่านเองตอนถูกสร้าง (ซึ่ง DI จะเลื่อนไปจนมี request แรก)
+/// เซิร์ฟเวอร์ที่ไม่ได้ตั้งกุญแจจะขึ้นมาปกติแล้วค่อยพังตอนมีคนใช้ ซึ่งเป็นเวลาที่แย่ที่สุด
+/// ที่จะรู้
+/// </param>
+public sealed class TokenService(string key, IConfiguration config)
 {
-    private readonly string _key = config["Jwt:Key"]
-        ?? throw new InvalidOperationException("ไม่ได้ตั้งค่า Jwt:Key ใน appsettings");
+    private readonly string _key = key;
     private readonly string _issuer = config["Jwt:Issuer"] ?? "mammod-tms";
     private readonly string _audience = config["Jwt:Audience"] ?? "mammod-tms-client";
 

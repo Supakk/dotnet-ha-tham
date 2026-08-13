@@ -2,10 +2,27 @@
 bin/
 obj/
 
-# ค่าเฉพาะเครื่อง — ห้าม commit เพราะจะมี secret ของจริงอยู่ในนี้
-appsettings.Development.local.json
-appsettings.Production.json
-*.user
+# ── ห้าม commit เด็ดขาด ────────────────────────────────────────────────────
+# repo นี้เป็นสาธารณะ อะไรที่เข้ามาในนี้แล้ว ถือว่าหลุดไปแล้วแม้จะลบทีหลัง
+# เพราะมันยังอยู่ใน git history และอาจถูก clone ไปแล้ว
 
+# กุญแจเซ็น JWT ของเครื่องตัวเอง สร้างอัตโนมัติตอนรันครั้งแรก
+.secrets/
+
+# ค่าเฉพาะเครื่อง / เฉพาะ environment ที่มักมี connection string กับ key จริง
+appsettings.*.local.json
+appsettings.Production.json
+appsettings.Staging.json
+*.env
+.env
+
+# ไฟล์ตั้งค่าส่วนตัวของ IDE บางทีมี path หรือ credential ติดมา
+*.user
 .vs/
 .idea/
+
+# certificate / private key
+*.pfx
+*.p12
+*.pem
+*.key
