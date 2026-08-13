@@ -1,0 +1,441 @@
+%% ฝั่งคลังของ MamMoD (ฐาน MMPRD) — วาดจาก MAMMOD_TABLE2_R02.sql ของจริง
+%% no-PK = ตารางที่ยังไม่มี PRIMARY KEY เลย (มีแค่ SERIALKEY IDENTITY)
+%% (+)   = คอลัมน์/constraint ที่เสนอเพิ่ม (ดู 02-alter-existing.sql)
+%% ทุกตารางมี ADDDATE/ADDWHO/EDITDATE/EDITWHO + SUSR1..5 ไม่ได้เขียนซ้ำทุกกล่อง
+%% หมายเหตุ: MST_ZONE ในนี้คือโซนใน *คลัง* คนละเรื่องกับ MST_DELIVERY_ZONE
+%% ของฝั่งขนส่ง (ดู er-transport-shipment.mmd)
+erDiagram
+    MST_WHSE  ||--o{ MST_AREA        : "มีพื้นที่"
+    MST_WHSE  ||--o{ MST_ZONE        : "มีโซนในคลัง"
+    MST_WHSE  ||--o{ MST_LOCATION    : "มีตำแหน่งเก็บ"
+    MST_AREA  ||--o{ MST_AREADETAIL  : "กำหนดลำดับ putaway"
+    MST_AREA  ||--o{ MST_ZONE        : "แบ่งเป็นโซน"
+    MST_AREA  ||--o{ MST_LOCATION    : "แบ่งเป็นตำแหน่ง"
+    MST_ZONE  ||--o{ MST_LOCATION    : "แบ่งเป็นตำแหน่ง"
+
+    MST_OWNER ||--o{ MST_SKU         : "เป็นเจ้าของสินค้า"
+    MST_PACK  ||--o{ MST_SKU         : "บันไดหน่วย 9 ชั้น"
+    MST_SKU   ||--o{ MST_ALTSKU      : "มีรหัสอื่น"
+    MST_SKU   ||--o{ TRX_LOT         : "มีล็อต"
+    MST_SKU   ||--o{ TRX_SKUXLOC     : "มียอดคงเหลือ"
+    TRX_LOT   ||--o{ TRX_LOTXLOCXID  : "กระจายตามตำแหน่ง"
+    TRX_LOT   ||--o{ TRX_LOTATTRIBUTE: "มีคุณลักษณะล็อต"
+    MST_LOCATION ||--o{ TRX_LOTXLOCXID : "เก็บของ"
+    MST_LOCATION ||--o{ TRX_SKUXLOC    : "เก็บของ"
+    TRX_TAGID    ||--o{ TRX_LOTXLOCXID : "บรรจุอยู่บนพาเลท"
+    TRX_DROPID   ||--o{ TRX_DROPIDDETAIL : "จัดกลุ่มพาเลท"
+    MST_SKU      ||--o{ TRX_ITRN        : "ถูกเคลื่อนย้าย"
+    TRX_LOT      ||--o{ TRX_INVENTORYHOLD : "ถูกกัก"
+
+    MST_VENDOR ||--o{ DOC_PO         : "ขายของให้"
+    DOC_PO     ||--o{ DOC_PODETAIL   : "มีรายการ"
+    DOC_PO     ||--o{ DOC_RCPT_HDR   : "ถูกรับเข้าเป็นใบรับ"
+    DOC_RCPT_HDR ||--o{ DOC_RCPT_TDETAIL : "มีรายการ"
+    DOC_RCPT_TDETAIL ||--o{ TRX_ITRN      : "สร้างรายการเคลื่อนไหว"
+
+    DOC_DO_HDR ||--o{ DOC_DO_DETAIL      : "มีรายการ"
+    DOC_DO_DETAIL ||--o{ DOC_DO_PICKDETAIL : "ถูกจัดของ"
+    CFG_ALLOCATESTRATEGY ||--o{ DOC_DO_PICKDETAIL : "จัดสรรด้วยกลยุทธ์นี้"
+    CFG_PUTAWAYSTRATEGY  ||--o{ CFG_PUTAWAYSTRATEGYDETAIL  : "มีเงื่อนไข"
+    CFG_ALLOCATESTRATEGY ||--o{ CFG_ALLOCATESTRATEGYDETAIL : "มีลำดับขั้น"
+    MST_SKU ||--o{ CFG_PUTAWAYSTRATEGY : "ผูกผ่าน PUTAWAYSTRATEGYKEY"
+
+    MST_WHSE {
+        int SERIALKEY PK "PK เป็น SERIALKEY"
+        nvarchar WHSEID "⚠ NULL ได้ และไม่ unique — ทุกตารางอ้างรหัสนี้ (+)"
+        nvarchar description
+        nvarchar time_zone
+        uniqueidentifier RowPointer "UNIQUE"
+    }
+
+    MST_AREA {
+        nvarchar WHSEID PK
+        nvarchar AREACODE PK "ไดอะแกรมเรียก AREAKEY"
+        nvarchar AREANAME
+        nvarchar AREATYPE
+        bit PUTAWAY_ALLOWED
+        bit PICK_ALLOWED
+        bit REPLENISH_ALLOWED
+        nvarchar STATUS "ACTIVE"
+    }
+
+    MST_ZONE {
+        nvarchar WHSEID PK
+        nvarchar PUTAWAYZONE PK "ไดอะแกรมเรียก ZONECODE"
+        nvarchar AREACODE FK
+        nvarchar ZONENAME
+        int PUTAWAYSEQ
+        int PICKSEQ
+        int REPLENISHSEQ
+        decimal TEMPERATURE_MIN
+        decimal TEMPERATURE_MAX
+        nvarchar STATUS
+    }
+
+    MST_LOCATION {
+        nvarchar WHSEID PK
+        nvarchar LOC PK
+        nvarchar AREACODE FK
+        nvarchar ZONECODE FK "ชี้ MST_ZONE.PUTAWAYZONE"
+        nvarchar LOCATIONTYPE
+        nvarchar AISLE
+        nvarchar BAY
+        nvarchar LEVELNO
+        decimal MAXWEIGHT "ความจุมีครบอยู่แล้ว"
+        decimal MAXCUBE
+        decimal MAXPALLET
+        decimal MAXCASE
+        bit MIXSKU_ALLOWED
+        bit MIXLOT_ALLOWED
+        bit MIXLPN_ALLOWED
+        decimal X_COORDINATE "พิกัดในคลัง สำหรับคำนวณระยะเดิน"
+        nvarchar ABC_CLASS
+        nvarchar LOCATIONSTATUS "OK"
+        nvarchar STATUS
+    }
+
+    MST_OWNER {
+        nvarchar OWNERKEY PK "no-PK (+)"
+        nvarchar COMPANY
+        nvarchar VAT
+        nvarchar DEFAULTSTRATEGY
+        nvarchar DEFAULTPUTAWAYSTRATEGY
+        nvarchar DEFAULTNEWALLOCATIONSTRATEGY
+        nvarchar TRACKINVENTORYBY
+        nvarchar CURRCODE
+        nvarchar STATUS
+    }
+
+    MST_SKU {
+        nvarchar OWNERKEY PK "no-PK (+)"
+        nvarchar SKU PK
+        nvarchar DESCR
+        nvarchar ALTSKU
+        nvarchar PACKKEY FK
+        decimal STDGROSSWGT
+        decimal STDNETWGT
+        decimal STDCUBE
+        nvarchar SKUGROUP
+        nvarchar PICKCODE
+        nvarchar PUTAWAYSTRATEGYKEY FK
+        nvarchar STRATEGYKEY FK
+        int SHELFLIFE "คุมอายุมีอยู่แล้ว"
+        nvarchar SHELFLIFEINDICATOR
+        int SHELFLIFEONRECEIVING
+        nvarchar LOTTABLEVALIDATIONKEY
+        nvarchar ROTATEBY
+        nvarchar ABC
+        int REORDERPOINT
+        decimal PRICE
+        decimal COST
+        nvarchar ACTIVE
+    }
+
+    MST_PACK {
+        nvarchar PACKKEY PK "no-PK (+)"
+        nvarchar PACKDESCR
+        nvarchar PACKUOM1 "บันได 9 ชั้น: UOM1..UOM9"
+        decimal CASECNT
+        decimal INNERPACK
+        decimal QTY
+        decimal PALLET
+        decimal LENGTHUOM1 "มิติแยกต่อชั้น"
+        decimal WEIGHTUOM1
+        decimal CUBE
+        decimal GROSSWGT
+        decimal NETWGT
+        decimal PALLETTI
+        decimal PALLETHI
+    }
+
+    MST_UOM {
+        nvarchar UM PK "no-PK (+) — ไม่มี BASEUOM/CONVERSIONRATE"
+        nvarchar UM_DESCR
+        nvarchar STATUS "DEFAULT NEW — แปลกสำหรับ master"
+    }
+
+    MST_ALTSKU {
+        nvarchar OWNERKEY PK "no-PK (+)"
+        nvarchar SKU PK
+        nvarchar ALTSKU PK
+        nvarchar VENDOR
+        nvarchar PACKKEY
+        nvarchar DEFAULTUOM
+    }
+
+    MST_VENDOR {
+        nvarchar WHSEID PK "มีอยู่แล้ว ละเอียดมาก"
+        nvarchar OWNERKEY PK
+        nvarchar VENDORKEY PK
+        nvarchar VENDORNAME
+        nvarchar TAXID
+        nvarchar SUBDISTRICT
+        nvarchar PROVINCE
+        nvarchar POSTALCODE
+        int LEADTIME_DAYS
+        bit QC_REQUIRED
+        bit ASN_REQUIRED "แต่ไม่มีตาราง ASN ในฐาน"
+        bit PO_REQUIRED
+        bit LOT_REQUIRED
+        bit MFGDATE_REQUIRED
+        bit EXPDATE_REQUIRED
+        int MIN_SHELFLIFE_DAYS
+        decimal OVERRECEIPT_PERCENT
+        nvarchar DEFAULTRECEIVELOC
+        nvarchar STATUS
+    }
+
+    TRX_LOT {
+        nvarchar LOT PK
+        nvarchar OWNERKEY PK
+        nvarchar SKU PK "PK ไม่มี WHSEID ต่างจากตารางอื่น"
+        decimal QTY
+        decimal QTYPREALLOCATED
+        decimal QTYALLOCATED
+        decimal QTYPICKED
+        decimal QTYONHOLD
+        decimal GROSSWGT
+        decimal NETWGT
+        datetime ARCHIVEDATE "NOT NULL DEFAULT 1901 — sentinel แทน NULL"
+        nvarchar STATUS "OK"
+    }
+
+    TRX_LOTATTRIBUTE {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar OWNERKEY PK
+        nvarchar SKU PK
+        nvarchar LOT PK
+        nvarchar LOTTABLE01 "LOTTABLE01..12 — 04/05/11/12 เป็น datetime"
+        datetime LOTTABLE04 "โดยธรรมเนียมคือวันผลิต"
+        datetime LOTTABLE05 "โดยธรรมเนียมคือวันหมดอายุ"
+        nvarchar EXTERNALLOT
+    }
+
+    TRX_LOTXLOCXID {
+        nvarchar WHSEID PK "no-PK (+) ← ต้นฉบับของสต็อก"
+        nvarchar OWNERKEY PK
+        nvarchar SKU PK
+        nvarchar LOT PK
+        nvarchar LOC PK
+        nvarchar ID PK "พาเลท — ชี้ TRX_TAGID"
+        decimal QTY
+        decimal QTYALLOCATED "จองระดับล็อตได้อยู่แล้ว"
+        decimal QTYPICKED
+        decimal QTYPICKINPROCESS
+        decimal PENDINGMOVEIN
+        decimal GROSSWGT
+        nvarchar STATUS
+    }
+
+    TRX_SKUXLOC {
+        nvarchar WHSEID PK "no-PK (+) — rollup ของ TRX_LOTXLOCXID"
+        nvarchar OWNERKEY PK
+        nvarchar SKU PK
+        nvarchar LOC PK
+        nvarchar LOT PK "มี LOT ด้วย จึงซ้อนกับตารางบน"
+        decimal QTY
+        decimal QTYALLOCATED
+        decimal QTYLOCATIONLIMIT
+        decimal QTYLOCATIONMINIMUM
+        decimal REPLENISHMENTQTY
+        nvarchar LOCATIONTYPE
+    }
+
+    TRX_ITRN {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar ITRNKEY PK
+        nvarchar TRANTYPE
+        nvarchar OWNERKEY
+        nvarchar SKU
+        nvarchar LOT
+        nvarchar FROMLOC
+        nvarchar FROMID
+        nvarchar TOLOC
+        nvarchar TOID
+        nvarchar SOURCEKEY "อ้างเอกสารต้นทางได้อยู่แล้ว"
+        nvarchar SOURCETYPE
+        nvarchar RECEIPTKEY
+        decimal QTY
+        nvarchar UOM
+        datetime EFFECTIVEDATE
+    }
+
+    TRX_TAGID {
+        nvarchar WHSEID PK "no-PK (+) — นี่คือ LPN/พาเลท"
+        nvarchar ID PK
+        decimal QTY
+        nvarchar PACKKEY
+        decimal PUTAWAYTI
+        decimal PUTAWAYHI
+        nvarchar LPNINVSTATUS
+        nvarchar STATUS
+    }
+
+    TRX_DROPID {
+        nvarchar WHSEID PK "no-PK (+) — กลุ่มพาเลทตอนจัดของ"
+        nvarchar DROPID PK
+        nvarchar DROPLOC
+        nvarchar DROPIDTYPE
+        nvarchar QCSTATUS
+        decimal LTLWEIGHT
+        int CARTONSCOUNTED
+        nvarchar STATUS
+    }
+
+    TRX_DROPIDDETAIL {
+        nvarchar WHSEID PK "no-PK (+) — parent/child ของ DROPID"
+        nvarchar DROPID PK
+        nvarchar CHILDID PK
+        nvarchar IDTYPE
+    }
+
+    TRX_INVENTORYHOLD {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar INVENTORYHOLDKEY PK
+        nvarchar LOT
+        nvarchar ID
+        nvarchar LOC
+        nvarchar HOLD
+        datetime DATEON
+        datetime DATEOFF "NOT NULL แม้ยังไม่ปลด hold"
+        decimal HOURSTOHOLD
+        datetime AUTORELEASEDATE
+    }
+
+    DOC_PO {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar POKEY PK
+        nvarchar EXTERNPOKEY
+        nvarchar OWNERKEY
+        datetime PODATE
+        nvarchar SELLERNAME "ไม่มี VENDORKEY — ผูกผู้ขายทางไหนต้องยืนยัน"
+        datetime EXPECTEDRECEIPTDATE
+        nvarchar INCOTERMS
+        nvarchar STATUS
+    }
+
+    DOC_PODETAIL {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar POKEY PK
+        nvarchar POLINENUMBER PK
+        nvarchar SKU
+        decimal QTYORDERED
+        decimal QTYRECEIVED
+        decimal QTYREJECTED
+        decimal UNITPRICE "⚠ float → decimal (+)"
+        decimal UNIT_COST "⚠ float → decimal (+)"
+        nvarchar QCREQUIRED
+        nvarchar STATUS
+    }
+
+    DOC_RCPT_HDR {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar RECEIPTKEY PK
+        nvarchar EXTERNRECEIPTKEY
+        nvarchar OWNERKEY
+        datetime RECEIPTDATE
+        nvarchar POKEY
+        nvarchar CARRIERKEY "ไม่มี VENDORKEY และไม่มี ASNKEY"
+        nvarchar CONTAINERKEY
+        nvarchar STATUS
+    }
+
+    DOC_RCPT_TDETAIL {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar RECEIPTKEY PK
+        nvarchar RECEIPTLINENUMBER PK
+        nvarchar SUBLINENUMBER PK
+        nvarchar SKU
+        nvarchar ID
+        decimal QTYEXPECTED
+        decimal QTYRECEIVED
+        decimal QTYADJUSTED
+        nvarchar TOLOC "เก็บเข้าที่ไหน — มีอยู่แล้ว"
+        nvarchar TOLOT
+        nvarchar TOID
+        nvarchar CONDITIONCODE
+        datetime LOTTABLE04 "วันผลิต/หมดอายุมาทางนี้"
+        decimal UNITPRICE "⚠ float → decimal (+)"
+        nvarchar STATUS
+    }
+
+    DOC_DO_DETAIL {
+        nvarchar WHSEID PK "no-PK (+)"
+        nvarchar ORDERKEY PK
+        nvarchar ORDERLINENUMBER PK
+        nvarchar SKU
+        decimal ORIGINALQTY
+        decimal OPENQTY
+        decimal SHIPPEDQTY
+        decimal QTYALLOCATED
+        decimal QTYPICKED
+        nvarchar UOM
+        nvarchar PACKKEY
+        decimal UNITPRICE "⚠ float → decimal (+)"
+        decimal TAX01 "⚠ float (+)"
+        decimal EXTENDEDPRICE "⚠ float (+)"
+        nvarchar ALLOCATESTRATEGYKEY FK
+        nvarchar PALLET_ID
+        nvarchar STATUS
+    }
+
+    DOC_DO_PICKDETAIL {
+        nvarchar WHSEID PK "no-PK (+) ← ชั้นงานเบิกมีอยู่แล้ว"
+        nvarchar PICKDETAILKEY PK
+        nvarchar PICKHEADERKEY "ตารางแม่ไม่อยู่ในไฟล์ที่ให้มา"
+        nvarchar ORDERKEY
+        nvarchar ORDERLINENUMBER
+        nvarchar SKU
+        nvarchar LOT
+        nvarchar LOC
+        nvarchar ID
+        nvarchar DROPID FK
+        decimal QTY
+        decimal QTYMOVED
+        decimal QTYREJECTED
+        nvarchar WAVEKEY
+        nvarchar QCSTATUS
+        nvarchar ITRNKEY
+        nvarchar ALLOCATESTRATEGYKEY FK
+        decimal FREIGHTCHARGES "⚠ float → decimal (+)"
+        nvarchar STATUS
+    }
+
+    CFG_PUTAWAYSTRATEGY {
+        nvarchar PUTAWAYSTRATEGYKEY PK "no-PK (+)"
+        nvarchar WHSEID
+        nvarchar DESCR
+    }
+
+    CFG_PUTAWAYSTRATEGYDETAIL {
+        nvarchar PUTAWAYSTRATEGYKEY PK "no-PK (+)"
+        nvarchar PUTAWAYSTRATEGYLINENUMBER PK
+        nvarchar PATYPE
+        nvarchar FROMLOC
+        nvarchar TOLOC
+        nvarchar AREAKEY
+        nvarchar ZONE "โซนในคลัง ควรผูก MST_ZONE"
+        nvarchar LOCSEARCHTYPE
+        nvarchar DIMENSIONRESTRICTION01 "01..06 — นี่คือ (other restrictions) ในไดอะแกรม"
+        nvarchar LOCATIONTYPEEXCLUDE01 "01..05"
+        nvarchar LOT01OPERATOR "LOT01..LOT10 OPERATOR/VALUE"
+    }
+
+    CFG_ALLOCATESTRATEGY {
+        nvarchar ALLOCATESTRATEGYKEY PK "no-PK (+)"
+        nvarchar DESCR
+        decimal RETRYIFQTYREMAIN
+        nvarchar ALLOCATESTRATEGYTYPE "nvarchar(1) — รหัสตัวเดียว ต้องขอตารางรหัส"
+    }
+
+    CFG_ALLOCATESTRATEGYDETAIL {
+        nvarchar ALLOCATESTRATEGYKEY PK "no-PK (+)"
+        nvarchar ALLOCATESTRATEGYLINENUMBER PK
+        nvarchar UOM
+        nvarchar PICKCODE
+        nvarchar LOCATIONTYPEOVERRIDE
+        nvarchar ALLOWOVERALLOCATIONS
+        nvarchar PICKCODESQL "⚠ เก็บ SQL ดิบ 2000 ตัวอักษร — ความเสี่ยง injection"
+        int STEPNUMBER
+        nvarchar GROUPUOMPICKS
+    }

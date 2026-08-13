@@ -1,7 +1,5 @@
 # Mammod TMS — Backend
-
-Backend ของ [Mammod_FrontEnd](https://github.com/Supakk/Mammod_FrontEnd)
-เขียนด้วย ASP.NET Core (net8.0) ตาม stack เดียวกับ `KM_BE_Dev/OMS_KMTo` ของทีม
+เขียนด้วย ASP.NET Core (net8.0) ตาม stack 
 
 ตอนนี้ข้อมูลเก็บ **ในหน่วยความจำ** ยังไม่มีฐานข้อมูล — รีสตาร์ทแล้วข้อมูลกลับไปเป็นค่าตั้งต้น
 กติกาทางธุรกิจทั้งหมดของจริงอยู่ครบแล้ว ที่ขาดคือที่เก็บถาวร
@@ -141,6 +139,11 @@ client เอาไปเทียบกับ `null` ตรง ๆ ถ้าต
 
 ### ขั้นต่อไป: ต่อฐานข้อมูล
 
+โครงสร้างฐานจริงกับส่วนที่ต้องแก้ก่อนต่อได้ อยู่ใน [`docs/data-model/`](docs/data-model/) —
+อ่าน [README ของโฟลเดอร์นั้น](docs/data-model/README.md) ก่อนเริ่ม โดยเฉพาะหัวข้อ 2
+เพราะตารางส่วนใหญ่ในฐานจริง**ยังไม่มี PRIMARY KEY** ซึ่ง EF Core จะ map เป็น
+keyless entity ที่เขียนกลับไม่ได้ ต้องรัน `02-alter-existing.sql` ส่วน A ก่อน
+
 ทำตามลำดับนี้ (ลอกรูปแบบจาก `KM_BE_Dev/OMS_KMTo/Database` ได้)
 
 1. `dotnet add package Microsoft.EntityFrameworkCore.SqlServer` และ `...EntityFrameworkCore.Design`
@@ -222,5 +225,7 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 
 ## เอกสารอ้างอิง
 
+- [`docs/data-model/`](docs/data-model/) — โครงสร้างฐานจริง (`MMPRD`) · ตารางที่ต้องเพิ่ม ·
+  สคริปต์แก้ตารางเดิม · ไดอะแกรม ER สองฝั่ง (ขนส่ง / คลัง)
 - `docs/tms-sequence.md` ในโปรเจค frontend — ลำดับงานทั้งหมดและตารางว่า endpoint ไหนทำอะไร
 - `src/features/*/api/*.mock.ts` ในโปรเจค frontend — โค้ดต้นทางที่ backend นี้แปลงมา

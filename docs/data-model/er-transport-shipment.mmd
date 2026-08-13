@@ -1,0 +1,378 @@
+%% ฝั่งขนส่งของ MamMoD (ฐาน MMPRD) — วาดจาก MAMMOD_TABLE2_R02.sql ของจริง
+%% NEW = ตารางที่เสนอเพิ่ม (ดู 01-new-tables.sql)
+%% (+)  = คอลัมน์ที่เสนอเติมให้ตารางเดิม (ดู 02-alter-existing.sql)
+%% ทุกตารางมี SERIALKEY int IDENTITY + ADDDATE/ADDWHO/EDITDATE/EDITWHO + SUSR1..5
+%% ซึ่งไม่ได้เขียนซ้ำในทุกกล่องเพื่อให้อ่านได้
+erDiagram
+    MST_TRANSPORTER ||--o{ MST_VEHICLE            : "เป็นเจ้าของรถ"
+    MST_TRANSPORTER ||--o{ MST_DRIVER             : "ว่าจ้างคนขับ"
+    MST_TRANSPORTER ||--o{ MST_TRANSPORT_RATE     : "มีเรตค่าขนส่ง"
+    MST_TRANSPORTER ||--o{ MST_TRANSPORTER_ROUTE  : "รับผิดชอบสายส่ง"
+    MST_TRANSPORTER ||--o{ MST_TRANSPORTER_DOCUMENT : "มีเอกสารประกอบ"
+    MST_VEHICLETYPE ||--o{ MST_VEHICLE            : "จัดประเภท"
+    MST_VEHICLETYPE ||--o{ MST_TRANSPORT_RATE     : "คิดเรตตามประเภท"
+    MST_VEHICLE     ||--o{ MST_TRANSPORTER_DOCUMENT : "เอกสารของคันรถ (+)"
+
+    MST_ROUTE          ||--o{ MST_ROUTE_ZONE          : "ครอบคลุมโซน"
+    MST_DELIVERY_ZONE  ||--o{ MST_ROUTE_ZONE          : "ถูกสายส่งครอบคลุม"
+    MST_DELIVERY_ZONE  ||--o{ MST_ZONE_COVERAGE       : "ครอบคลุมพื้นที่"
+    MST_DELIVERY_ZONE  ||--o{ MST_CUSTOMER            : "จัดโซนให้ลูกค้า"
+    MST_ROUTE          ||--o{ MST_TRANSPORTER_ROUTE   : "ถูกวิ่งโดย"
+    MST_ROUTE          ||--o{ MST_TRANSPORT_RATE      : "มีเรตประจำสาย"
+    MST_ROUTE          ||--o{ DOC_TRANSPORT_PLAN      : "วางแผนบนสาย"
+    MST_ROUTE          ||--o{ DOC_SHIPMENT_HDR        : "ถูกใช้โดยเที่ยว"
+    MST_ROUTE          ||--o{ DOC_DO_HDR              : "ใบสั่งส่งอยู่บนสาย"
+
+    DOC_TRANSPORT_PLAN  ||--o{ DOC_TRANSPORT_PLAN_LINE : "ถือใบสั่งส่ง"
+    DOC_TRANSPORT_PLAN  ||--o{ DOC_SHIPMENT_HDR        : "ออกใบปิดบรรทุก (+)"
+    DOC_SHIPMENT_HDR    ||--o{ DOC_SHIPMENT_STOP       : "มีจุดส่ง"
+    DOC_SHIPMENT_HDR    ||--o{ DOC_SHIPMENT_STATUS_LOG : "บันทึกทุกการเปลี่ยนสถานะ"
+    DOC_SHIPMENT_HDR    ||--o{ DOC_SHIPMENT_HDR        : "ใบลูกจากการแยกใบ (+)"
+    DOC_SHIPMENT_STOP   ||--o{ DOC_SHIPMENT_DETAIL     : "มีใบสั่งส่ง"
+    DOC_SHIPMENT_DETAIL ||--o{ DOC_SHIPMENT_DETAIL_LINE: "มีรายการสินค้า"
+    DOC_DO_HDR          ||--o{ DOC_SHIPMENT_DETAIL     : "ถูกจัดขึ้นรถ"
+    DOC_DO_HDR          ||--o{ DOC_TRANSPORT_PLAN_LINE : "ถูกถือไว้ในแผน"
+    MST_CUSTOMER        ||--o{ DOC_SHIPMENT_STOP       : "เป็นปลายทาง"
+    MST_VEHICLE         ||--o{ DOC_SHIPMENT_HDR        : "วิ่งเที่ยว"
+    MST_DRIVER          ||--o{ DOC_SHIPMENT_HDR        : "ขับเที่ยว"
+    MST_TRANSPORT_RATE  ||--o{ DOC_SHIPMENT_HDR        : "คิดราคาด้วยเรตนี้"
+    MST_SHIPTO          ||--o{ MST_CUSTOMER            : "ข้อมูลเดิมที่ถูกย้ายมา"
+
+    MST_TRANSPORTER {
+        nvarchar TRANSPORTERKEY PK "nvarchar(20)"
+        nvarchar TRANSPORTERNAME
+        nvarchar TRANSPORTERTYPE
+        nvarchar TAXID
+        nvarchar BRANCHCODE
+        nvarchar SUBDISTRICT "ที่อยู่แบบไทยครบ"
+        nvarchar DISTRICT
+        nvarchar PROVINCE
+        nvarchar POSTALCODE
+        nvarchar SERVICEAREA "free text — ซ้อนกับ MST_ROUTE_ZONE"
+        nvarchar PAYMENTTERM
+        int CREDITTERM
+        nvarchar BANKACCOUNT
+        nvarchar STATUS "ACTIVE"
+    }
+
+    MST_VEHICLETYPE {
+        nvarchar VEHICLETYPEKEY PK
+        nvarchar VEHICLETYPENAME
+        decimal MAXWEIGHT "ค่าเริ่มต้น — ค่าที่ผูกกับคันรถชนะ"
+        decimal MAXCUBE
+        decimal MAXPALLET "UI ยังไม่มีแนวคิดพาเลท"
+        decimal MAXUNITS
+        decimal LENGTH
+        decimal WIDTH
+        decimal HEIGHT
+        nvarchar STATUS
+    }
+
+    MST_VEHICLE {
+        nvarchar VEHICLEKEY PK
+        nvarchar TRANSPORTERKEY FK
+        nvarchar VEHICLETYPEKEY FK
+        nvarchar LICENSEPLATE "ต้องเพิ่ม UNIQUE (+)"
+        nvarchar LICENSEPROVINCE
+        nvarchar PLATE_TRAILER "(+) รถพ่วงมีสองทะเบียน"
+        nvarchar PLATE_TRAILER_PROVINCE "(+)"
+        nvarchar CHASSISNO
+        nvarchar ENGINENO
+        decimal MAXWEIGHT
+        decimal MAXCUBE
+        decimal MAXPALLET
+        nvarchar GPSDEVICEID
+        date REGISTRATIONEXPIRE
+        date INSURANCEEXPIRE
+        date NEXTSERVICE_DATE
+        nvarchar STATUS
+    }
+
+    MST_DRIVER {
+        nvarchar DRIVERKEY PK
+        nvarchar TRANSPORTERKEY FK
+        nvarchar DRIVERNAME
+        nvarchar IDCARDNO
+        nvarchar MOBILE
+        nvarchar LICENSE_NO
+        nvarchar LICENSE_TYPE "มีอยู่แล้ว"
+        date LICENSE_EXPIRE_DATE
+        nvarchar DEFAULT_VEHICLEKEY FK
+        nvarchar STATUS
+    }
+
+    MST_ROUTE {
+        nvarchar ROUTE PK "NEW — เดิมเป็นข้อความลอยใน 6 ตาราง"
+        nvarchar ROUTENAME
+        nvarchar ORIGIN_WHSEID "DC ที่รถออก"
+        nvarchar COLOURHEX "สีเส้นบนแผนที่"
+        int TRANSIT_DAY
+        time CUT_OFF_TIME
+        nvarchar STATUS
+    }
+
+    MST_DELIVERY_ZONE {
+        nvarchar ZONE PK "NEW — คนละเรื่องกับ MST_ZONE ที่เป็นโซนในคลัง"
+        nvarchar ZONENAME
+        decimal MAX_VEHICLE_WEIGHT "น้ำหนักรถสูงสุดที่เข้าพื้นที่ได้ — ต้องยืนยันความหมาย"
+        int SERVICE_MINUTE
+        nvarchar STATUS
+    }
+
+    MST_ZONE_COVERAGE {
+        int SERIALKEY PK "NEW — 1 โซนต่อหลายพื้นที่"
+        nvarchar ZONE FK
+        nvarchar PROVINCE
+        nvarchar DISTRICT
+        nvarchar SUBDISTRICT
+        nvarchar POSTALCODE "ตัวที่ใช้จัดโซนให้ใบสั่งส่งอัตโนมัติ"
+    }
+
+    MST_ROUTE_ZONE {
+        nvarchar ROUTE PK "NEW"
+        nvarchar ZONE PK
+        int SEQUENCE "ลำดับการวิ่ง"
+        bit DEFAULT_FLAG "สายหลักของโซนนี้ — UNIQUE ต่อโซน"
+        nvarchar STATUS
+    }
+
+    MST_TRANSPORTER_ROUTE {
+        nvarchar TRANSPORTERKEY PK
+        nvarchar ROUTE PK "ผูก FK ได้แล้ว (+)"
+        nvarchar ZONE "อยู่นอก PK — แตกรายโซนไม่ได้"
+        int PRIORITY
+        bit DEFAULT_FLAG
+        int TRANSIT_DAY
+        time CUT_OFF_TIME
+        nvarchar STATUS
+    }
+
+    MST_TRANSPORT_RATE {
+        nvarchar RATEKEY PK
+        nvarchar TRANSPORTERKEY FK
+        nvarchar VEHICLETYPEKEY FK
+        nvarchar ROUTE FK "ผูก FK ได้แล้ว (+)"
+        nvarchar ZONE FK "(+)"
+        nvarchar FROMPROVINCE
+        nvarchar TOPROVINCE
+        nvarchar RATETYPE
+        decimal MINWEIGHT
+        decimal MAXWEIGHT
+        decimal BASE_RATE
+        decimal RATE_PER_KM
+        decimal RATE_PER_KG
+        decimal RATE_PER_CUBE
+        decimal RATE_PER_PALLET
+        decimal FUEL_SURCHARGE
+        decimal MINIMUM_CHARGE
+        nvarchar CURRENCY
+        date EFFECTIVE_DATE
+        date EXPIRE_DATE
+        nvarchar STATUS
+    }
+
+    MST_TRANSPORTER_DOCUMENT {
+        nvarchar DOCUMENTKEY PK
+        nvarchar TRANSPORTERKEY FK
+        nvarchar VEHICLEKEY FK "(+) ประกัน/ภาษีเป็นของคันรถ"
+        nvarchar DOCUMENTTYPE
+        date ISSUEDATE
+        date EXPIREDATE
+        nvarchar FILEPATH
+        nvarchar FILEURL
+        nvarchar STATUS
+    }
+
+    DOC_TRANSPORT_PLAN {
+        nvarchar WHSEID PK "NEW — ชั้นแผน PL-… ที่หายไปทั้งชั้น"
+        nvarchar PLANKEY PK
+        datetime PLANDATE
+        date DELIVERYDATE
+        nvarchar ZONE FK
+        nvarchar ROUTE FK
+        nvarchar SHIPMENTKEY "ใบที่ออกจากแผนนี้"
+        nvarchar STATUS "DRAFT | ISSUED | CANCELLED"
+        nvarchar CANCELREASON
+    }
+
+    DOC_TRANSPORT_PLAN_LINE {
+        nvarchar WHSEID PK "NEW"
+        nvarchar PLANKEY PK
+        nvarchar ORDERKEY PK "UNIQUE ทั่วตาราง — ของอยู่ได้แผนเดียว"
+        nvarchar STATUS
+    }
+
+    DOC_SHIPMENT_HDR {
+        nvarchar WHSEID PK
+        nvarchar SHIPMENTKEY PK
+        datetime SHIPMENTDATE "วันที่ออกเอกสาร"
+        date DELIVERYDATE "(+) วันนัดส่ง — คนละวัน"
+        nvarchar PLANKEY FK "(+)"
+        nvarchar PARENT_SHIPMENTKEY FK "(+) ใบแม่ตอนแยกใบ"
+        nvarchar ROUTE FK
+        nvarchar ZONE FK
+        nvarchar DOOR
+        nvarchar TRANSPORTERKEY FK
+        nvarchar VEHICLEKEY FK
+        nvarchar DRIVERKEY FK
+        nvarchar LICENSEPLATE "snapshot"
+        nvarchar DRIVERNAME "snapshot"
+        nvarchar TRAILERID
+        nvarchar SEALNO "(+)"
+        int ASSISTANTCOUNT "(+) เด็กติดรถ 0-3"
+        datetime PLANNEDDEPARTURE
+        datetime ACTUALDEPARTURE
+        datetime PLANNEDARRIVAL
+        datetime ACTUALARRIVAL
+        int TOTALSTOP "คำนวณใหม่ทุกครั้งที่เขียน — มี view ตรวจให้"
+        int TOTALORDER
+        decimal TOTALWEIGHT
+        decimal TOTALCUBE
+        decimal MAXWEIGHT
+        decimal MAXCUBE
+        decimal UTILIZATION_WEIGHT "% ใช้ไป — ใช้เตือนเกินพิกัดได้เลย"
+        decimal UTILIZATION_CUBE
+        nvarchar RATEKEY FK
+        decimal ESTIMATEDCOST
+        decimal ACTUALCOST
+        decimal TRIPPRICE "(+) แยกส่วนเพื่อตอบได้ว่าคิดจากอะไร"
+        decimal PRICEADD "(+)"
+        decimal PRICEDEDUCT "(+)"
+        nvarchar FREIGHTNOTE "(+)"
+        bit EXPRESS_FLAG "(+)"
+        datetime CONFIRMDATE "(+)"
+        datetime SENTDATE "(+)"
+        nvarchar STATUSMESSAGE "(+) ข้อความที่ WMS/OMS ตีกลับ"
+        nvarchar CANCELREASON "(+) ไม่บังคับกรอก"
+        nvarchar STATUS "ฐานใช้ NEW/… ตัวใหญ่ · UI ใช้ draft/… ตัวเล็ก"
+        rowversion ROWVER "(+) optimistic concurrency"
+    }
+
+    DOC_SHIPMENT_STOP {
+        nvarchar WHSEID PK
+        nvarchar SHIPMENTKEY PK
+        int SHIPMENTSTOPID PK
+        int STOPSEQ "ต้อง UNIQUE ต่อใบ (+)"
+        nvarchar CUSTOMERKEY FK "(+) เดิมไม่มีตารางแม่"
+        nvarchar SHIPTOKEY "ชี้ MST_SHIPTO ที่ไม่ unique"
+        nvarchar SHIPTONAME
+        nvarchar ADDRESS1
+        nvarchar SUBDISTRICT
+        nvarchar DISTRICT
+        nvarchar PROVINCE
+        nvarchar POSTALCODE
+        decimal LATITUDE "มีอยู่แล้ว decimal(18,10)"
+        decimal LONGITUDE
+        nvarchar CONTACTPHONE
+        nvarchar DELIVERTO "(+) ส่งต่างที่"
+        decimal CODAMOUNT "(+)"
+        date DUEDATE "(+) ใช้คำนวณ ล่าช้า +N วัน"
+        datetime PLANNEDARRIVAL
+        datetime ACTUALARRIVAL
+        time TIMEWINDOW_FROM
+        time TIMEWINDOW_TO
+        int SERVICE_MINUTE
+        nvarchar DELIVERY_STATUS
+        nvarchar POD_STATUS
+        nvarchar PODFILE
+        nvarchar STATUS
+    }
+
+    DOC_SHIPMENT_DETAIL {
+        nvarchar WHSEID PK
+        nvarchar SHIPMENTKEY PK
+        int SHIPMENTDETAILID PK
+        int SHIPMENTSTOPID FK
+        nvarchar ORDERKEY "UNIQUE ถ้าไม่ยกเลิก — ของอยู่ใบเดียว (+)"
+        nvarchar EXTERNORDERKEY "เลข SO จาก SAP"
+        nvarchar CUSTOMERKEY
+        nvarchar ROUTE FK "(+)"
+        nvarchar ZONE FK "(+)"
+        datetime REQUIREDDELIVERYDATE
+        decimal OUTWEIGHT
+        decimal OUTCUBE
+        decimal TOTALCOST
+        nvarchar STATUS
+    }
+
+    DOC_SHIPMENT_DETAIL_LINE {
+        nvarchar WHSEID PK
+        nvarchar SHIPMENTKEY PK
+        int SHIPMENTDETAILID PK
+        int SHIPMENTLINENO PK
+        nvarchar SKU
+        nvarchar LOT
+        nvarchar ID "พาเลท — ชี้ TRX_TAGID"
+        decimal ORDERQTY
+        decimal SHIPMENTQTY
+        decimal PICKEDQTY
+        decimal LOADEDQTY
+        decimal DELIVEREDQTY
+        decimal SHORTQTY
+        decimal DAMAGEQTY
+        decimal GROSSWGT "ใช้ตรวจยอดรวมบน HDR"
+        decimal CUBE
+        nvarchar REASONCODE
+        nvarchar STATUS
+    }
+
+    DOC_SHIPMENT_STATUS_LOG {
+        int SERIALKEY PK "NEW — timeline 5 ขั้นต้องสอบย้อนได้"
+        nvarchar WHSEID FK
+        nvarchar SHIPMENTKEY FK
+        nvarchar FROMSTATUS
+        nvarchar TOSTATUS
+        nvarchar SOURCESYSTEM "TMS | OMS | MMX | WMS | SAP"
+        nvarchar MESSAGE
+        datetime CHANGEDATE
+        nvarchar CHANGEWHO
+    }
+
+    MST_CUSTOMER {
+        nvarchar CUSTOMERKEY PK "NEW — ตัวที่ FK ชี้ได้จริง"
+        nvarchar SHIPTO "เลขเดิมใน MST_SHIPTO เพื่อสอบย้อน"
+        nvarchar CUSTOMERNAME
+        nvarchar SUBDISTRICT "ที่อยู่แบบไทย ต่างจาก MST_SHIPTO"
+        nvarchar DISTRICT
+        nvarchar PROVINCE
+        nvarchar POSTALCODE
+        decimal LATITUDE "decimal ไม่ใช่ข้อความอย่าง gps1"
+        decimal LONGITUDE
+        nvarchar ZONE FK
+        nvarchar ROUTE FK
+        time TIMEWINDOW_FROM
+        time TIMEWINDOW_TO
+        bit COD_FLAG
+        nvarchar STATUS
+    }
+
+    MST_SHIPTO {
+        int SERIALKEY PK "PK เป็น SERIALKEY เดี่ยว — SHIPTO ไม่ unique"
+        nvarchar SHIPTO "FK ชี้มาไม่ได้"
+        nvarchar name "user-defined type"
+        nvarchar city "ที่อยู่แบบตะวันตก แมปโซนไทยไม่ได้"
+        nvarchar state
+        nvarchar zip
+        nvarchar county
+        nvarchar gps1 "พิกัดเป็นข้อความ nvarchar(200)"
+    }
+
+    DOC_DO_HDR {
+        int SERIALKEY PK
+        nvarchar ORDERKEY "ควรเป็น PK ร่วมกับ WHSEID"
+        nvarchar EXTERNORDERKEY
+        nvarchar SHIPTO "ชี้ MST_SHIPTO"
+        nvarchar ROUTE FK "(+)"
+        nvarchar ZONE FK "(+) เดิมมีแต่ ROUTE"
+        int STOP
+        nvarchar SHIPMENTID
+        datetime DELIVERYDATE
+        datetime REQUESTEDSHIPDATE
+        datetime ACTUALSHIPDATE
+        decimal TOTALQTY
+        decimal TOTALGROSSWGT
+        decimal TOTALCUBE
+        nvarchar POKEY
+        nvarchar STATUS
+        rowversion ROWVER "(+)"
+    }
