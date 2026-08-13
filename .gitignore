@@ -1,0 +1,11 @@
+# .NET build output
+bin/
+obj/
+
+# ค่าเฉพาะเครื่อง — ห้าม commit เพราะจะมี secret ของจริงอยู่ในนี้
+appsettings.Development.local.json
+appsettings.Production.json
+*.user
+
+.vs/
+.idea/
