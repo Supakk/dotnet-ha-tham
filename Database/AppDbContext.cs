@@ -33,8 +33,6 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<VehicleTypeRow> VehicleTypes => Set<VehicleTypeRow>();
     public DbSet<DriverRow> Drivers => Set<DriverRow>();
     public DbSet<CustomerRow> Customers => Set<CustomerRow>();
-    public DbSet<SalesOrderRow> SalesOrders => Set<SalesOrderRow>();
-    public DbSet<SalesOrderLineRow> SalesOrderLines => Set<SalesOrderLineRow>();
     public DbSet<DeliveryOrderRow> DeliveryOrders => Set<DeliveryOrderRow>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder builder) =>
@@ -167,37 +165,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.Route).HasColumnName("ROUTE");
         });
 
-        b.Entity<SalesOrderRow>(e =>
-        {
-            e.ToTable("DOC_SO_HDR");
-            e.HasKey(x => new { x.WhseId, x.SoKey });
-            e.Property(x => x.WhseId).HasColumnName("WHSEID");
-            e.Property(x => x.SoKey).HasColumnName("SOKEY");
-            e.Property(x => x.CustomerKey).HasColumnName("CUSTOMERKEY");
-            e.Property(x => x.OrderDate).HasColumnName("ORDERDATE");
-            e.Property(x => x.RequestedDate).HasColumnName("REQUESTEDDATE");
-            e.Property(x => x.SourceSystem).HasColumnName("SOURCESYSTEM");
-            e.Property(x => x.Currency).HasColumnName("CURRENCY");
-            e.Property(x => x.TotalAmount).HasColumnName("TOTALAMOUNT");
-            e.Property(x => x.TotalLine).HasColumnName("TOTALLINE");
-            e.Property(x => x.Status).HasColumnName("STATUS");
-        });
 
-        b.Entity<SalesOrderLineRow>(e =>
-        {
-            e.ToTable("DOC_SO_DETAIL");
-            e.HasKey(x => new { x.WhseId, x.SoKey, x.LineNumber });
-            e.Property(x => x.WhseId).HasColumnName("WHSEID");
-            e.Property(x => x.SoKey).HasColumnName("SOKEY");
-            e.Property(x => x.LineNumber).HasColumnName("SOLINENUMBER");
-            e.Property(x => x.Sku).HasColumnName("SKU");
-            e.Property(x => x.Uom).HasColumnName("UOM");
-            e.Property(x => x.OrderQty).HasColumnName("ORDERQTY");
-            e.Property(x => x.ShippedQty).HasColumnName("SHIPPEDQTY");
-            e.Property(x => x.UnitPrice).HasColumnName("UNITPRICE");
-            e.Property(x => x.ExtendedPrice).HasColumnName("EXTENDEDPRICE");
-            e.Property(x => x.Status).HasColumnName("STATUS");
-        });
 
         b.Entity<DeliveryOrderRow>(e =>
         {
@@ -328,33 +296,7 @@ public sealed class CustomerRow
     public string? Route { get; set; }
 }
 
-public sealed class SalesOrderRow
-{
-    public string WhseId { get; set; } = "";
-    public string SoKey { get; set; } = "";
-    public string? CustomerKey { get; set; }
-    public DateTime OrderDate { get; set; }
-    public DateTime? RequestedDate { get; set; }
-    public string SourceSystem { get; set; } = "";
-    public string? Currency { get; set; }
-    public decimal? TotalAmount { get; set; }
-    public int? TotalLine { get; set; }
-    public string Status { get; set; } = "";
-}
 
-public sealed class SalesOrderLineRow
-{
-    public string WhseId { get; set; } = "";
-    public string SoKey { get; set; } = "";
-    public string LineNumber { get; set; } = "";
-    public string Sku { get; set; } = "";
-    public string? Uom { get; set; }
-    public decimal OrderQty { get; set; }
-    public decimal ShippedQty { get; set; }
-    public decimal? UnitPrice { get; set; }
-    public decimal? ExtendedPrice { get; set; }
-    public string Status { get; set; } = "";
-}
 
 public sealed class DeliveryOrderRow
 {

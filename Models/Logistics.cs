@@ -22,7 +22,18 @@ public sealed record ManifestStop
 {
     public required string Id { get; init; }
     public required string DoNo { get; init; }
-    /// <summary>Sales order this drop came from — the reference back to SAP via OMS.</summary>
+    /// <summary>
+    /// Shipment order — the ใบปิดบรรทุก this drop is loaded on, e.g.
+    /// <c>MN-202608-0043</c>. Empty while the drop is still in the pending pool,
+    /// because it is not on one yet.
+    ///
+    /// SO here is <i>Shipment Order</i>, not sales order. The distinction is easy
+    /// to lose: the ER diagram labels a table <c>DOC_SO_HDR</c> and means the one
+    /// the database calls <c>DOC_DO_HDR</c>, and this field was documented as a
+    /// sales-order reference for a while. The document a drop originally came
+    /// from lives in SAP and reaches the database only as
+    /// <c>DOC_DO_HDR.EXTERNORDERKEY</c>, which is a different thing again.
+    /// </summary>
     public required string SoNo { get; init; }
     public required string PickNo { get; init; }
     public required string PickDate { get; init; }

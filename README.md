@@ -209,10 +209,10 @@ node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 The API runs with or without SQL Server. Which one is decided by a single
 setting: a connection string named `Mmdev` in `appsettings.Development.json`.
 
-| Connection string | Master lists come from | `/sales-orders` |
-| --- | --- | --- |
-| Set | `MMDEV` on SQL Server | Available |
-| Absent | The in-memory seed, as before | `503` with a message saying why |
+| Connection string | Master lists come from |
+| --- | --- |
+| Set | `MMDEV` on SQL Server |
+| Absent | The in-memory seed, as before |
 
 It is optional rather than required so the project still starts with nothing
 installed but the .NET SDK, which is what the smoke tests and the frontend
@@ -226,8 +226,21 @@ cd docs\data-model
 ```
 
 Reading is wired up: `/warehouses`, `/delivery-zones`, `/routes`, `/carriers`,
-`/fleet-vehicles`, `/drivers`, and `/sales-orders` are served from the database
-via `Database/AppDbContext.cs` and `Database/MasterQueries.cs`.
+`/fleet-vehicles` and `/drivers` are served from the database via
+`Database/AppDbContext.cs` and `Database/MasterQueries.cs`.
+
+### SO Means Shipment Order
+
+`SO` in this project is the **ใบปิดบรรทุก** — `DOC_SHIPMENT_HDR`, the document a
+truck runs against. It is not a sales order, and there is no sales-order table:
+what a customer ordered is raised in SAP, forwarded by OMS, and reaches this
+database only as a reference string in `DOC_DO_HDR.EXTERNORDERKEY`.
+
+The name is used inconsistently in places that predate this note — the ER
+diagram labels a table `DOC_SO_HDR` and means `DOC_DO_HDR`; the frontend's
+`utils/shipmentOrders.ts` names a *screen*, not a document. `docs/data-model/README.md`
+section 0.0 lays out every spelling and what each one actually refers to. Read
+it before adding anything with SO in the name.
 
 ### Reads Only — And What That Costs
 

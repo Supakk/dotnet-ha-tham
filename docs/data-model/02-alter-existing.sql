@@ -1,4 +1,4 @@
-/* =============================================================================
+﻿/* =============================================================================
    MamMoD (MMPRD) — แก้ตารางเดิมให้ครบและสอดคล้อง
    รันหลัง 01-new-tables.sql
 
@@ -469,34 +469,20 @@ ALTER TABLE [dbo].[DOC_DO_DETAIL] WITH CHECK ADD CONSTRAINT [FK_DO_DETAIL_SKU]
     FOREIGN KEY([OWNERKEY], [SKU]) REFERENCES [dbo].[MST_SKU] ([OWNERKEY], [SKU])
 GO
 
-/* --- ใบสั่งส่งชี้กลับไปหาใบสั่งขาย ---------------------------------------
-   `EXTERNORDERKEY` เก็บเลข SO เป็นข้อความมาตลอด และเป็น NOT NULL อยู่แล้วในฐาน
-   เดิม — FK นี้ไม่ได้เพิ่มข้อบังคับใหม่ว่า "ต้องมีเลข SO" แต่เพิ่มว่า
-   **เลขนั้นต้องมีใบ SO อยู่จริง** ซึ่งเดิมไม่มีอะไรตรวจเลย
-   ทิศทางคือ DO → SO เพราะ SO ใบเดียวแตกเป็นได้หลาย DO
+/* --- ใบสั่งส่งชี้กลับไปเอกสารต้นทาง --------------------------------------
+   `DOC_DO_HDR.EXTERNORDERKEY` เก็บเลขเอกสารจากระบบต้นทาง (SAP ผ่าน OMS) เป็น
+   ข้อความ และ **ยังผูก FK ไม่ได้** เพราะระบบต้นทางอยู่นอกฐานนี้ ไม่มีตารางให้ชี้
 
-   ⚠ บนฐานที่มีข้อมูลจริง อันนี้จะล้มถ้ามี DO ที่อ้างเลข SO ที่ไม่มีใบรองรับ
-     ซึ่งเป็นเรื่องที่ต้องรู้ ไม่ใช่เรื่องที่ควรข้าม ตรวจก่อนด้วย query นี้
-     ต้องได้ 0 แถว:
+   เคยมีการเสนอสร้างตาราง `DOC_SO_HDR` มารับตรงนี้ — **ถอนออกแล้ว** เพราะ
+   ในโปรเจคนี้ SO ย่อมาจาก *Shipment Order* คือใบปิดบรรทุก ซึ่งมีตารางอยู่แล้ว
+   คือ `DOC_SHIPMENT_HDR` ไม่ใช่ Sales Order ตามที่เข้าใจผิดตอนแรก
+   (ไดอะแกรม ER ก็ใช้ชื่อ `DOC_SO_HDR` เรียกตารางที่ฐานจริงชื่อ `DOC_DO_HDR`
+   อีกที — คำว่า SO ในเอกสารชุดนี้จึงต้องอ่านตามบริบททุกครั้ง)
 
-       SELECT d.WHSEID, d.ORDERKEY, d.EXTERNORDERKEY
-       FROM   dbo.DOC_DO_HDR d
-       WHERE  NOT EXISTS (SELECT 1 FROM dbo.DOC_SO_HDR s
-                          WHERE s.WHSEID = d.WHSEID AND s.SOKEY = d.EXTERNORDERKEY);
+   ถ้าวันหนึ่งต้องตรวจว่าเลขต้นทางซ้ำหรือชี้ไปไหน ให้ทำที่ backend ตอนรับเข้า
+   ไม่ใช่ที่ FK — ฐานนี้ไม่มีทางรู้ว่าเลขของ SAP ถูกหรือผิด */
 
-     ถ้าได้แถวออกมา แปลว่าต้องสร้างใบ SO ย้อนหลังจากข้อมูลที่มีบน DO ก่อน
-     (backfill) อย่าลบ DO ทิ้งและอย่าล้างค่า EXTERNORDERKEY เพื่อให้ FK ผ่าน */
-ALTER TABLE [dbo].[DOC_DO_HDR] WITH CHECK ADD CONSTRAINT [FK_DO_HDR_SO]
-    FOREIGN KEY([WHSEID], [EXTERNORDERKEY]) REFERENCES [dbo].[DOC_SO_HDR] ([WHSEID], [SOKEY])
-GO
-
-/* บรรทัดใบสั่งขายชี้ไปสินค้า — อยู่ตรงนี้เพราะ PK ของ MST_SKU เพิ่งถูกใส่ในส่วน A
-   ของไฟล์นี้ ตอน 01-new-tables.sql รัน ตารางนั้นยังไม่มีคีย์ให้ FK เกาะ */
-ALTER TABLE [dbo].[DOC_SO_DETAIL] WITH CHECK ADD CONSTRAINT [FK_DOC_SO_DETAIL_SKU]
-    FOREIGN KEY([OWNERKEY], [SKU]) REFERENCES [dbo].[MST_SKU] ([OWNERKEY], [SKU])
-GO
-
-/* หา DO ทุกใบของ SO หนึ่งใบ — เส้นทางที่จอ "SO ใบนี้ส่งครบหรือยัง" ต้องใช้ */
+/* หาใบสั่งส่งทุกใบที่มาจากเอกสารต้นทางเดียวกัน */
 CREATE INDEX [IX_DO_HDR_EXTERNORDERKEY]
     ON [dbo].[DOC_DO_HDR] ([WHSEID], [EXTERNORDERKEY]) INCLUDE ([ORDERKEY], [STATUS])
 GO
