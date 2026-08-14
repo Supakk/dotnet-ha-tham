@@ -805,6 +805,96 @@ public sealed class TmsStore
         if (_drivers.Any(d => d.Id != exceptId && string.Equals(d.Code, code.Trim(), StringComparison.OrdinalIgnoreCase)))
             throw new DomainException($"รหัสพนักงานขับรถ {code} ถูกใช้แล้ว");
     }
+
+    /* ── ลบ master ────────────────────────────────────────────────────────────
+       กติกาเดียวกับฝั่งฐานข้อมูล (Database/MasterDeletes.cs): ลบได้เฉพาะแถวที่
+       ไม่มีอะไรอ้างถึง ที่เหลือปฏิเสธพร้อมบอกว่าอะไรถืออยู่
+
+       โครงการนี้ตั้งใจไม่มี delete มาตลอด เพราะการตั้ง active = false ทำให้
+       เอกสารเก่าที่อ้างชื่อนั้นยังอ่านได้ ส่วน delete ทำไม่ได้ — เหตุผลนั้นยังจริง
+       สำหรับแถวที่เคยถูกใช้ และเป็นที่มาของการตรวจข้างล่างนี้ สิ่งที่มันไม่ได้
+       ครอบคลุมคือแถวที่เพิ่งพิมพ์ผิดเมื่อครู่ ซึ่งเป็นเหตุผลที่ delete มีอยู่ */
+
+    private static DomainException InUse(string what, string key, string label, int count) =>
+        new($"ลบ{what} {key} ไม่ได้ — มี{label} {count} รายการอ้างถึงอยู่ " +
+            "ถ้าเลิกใช้แล้วให้ตั้งเป็นไม่ใช้งาน (active = false) แทน เอกสารเก่าจะได้ยังอ่านได้");
+
+    public void DeleteWarehouse(string id)
+    {
+        lock (_gate)
+        {
+            var row = _warehouses.FirstOrDefault(w => w.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบคลังนี้");
+            var used = _manifests.Count(m => m.WarehouseCode == row.Code)
+                     + _plans.Count(p => p.WarehouseCode == row.Code);
+            if (used > 0) throw InUse("คลัง", row.Code, "เอกสาร", used);
+            _warehouses = [.. _warehouses.Where(w => w.Id != id)];
+        }
+    }
+
+    public void DeleteZone(string id)
+    {
+        lock (_gate)
+        {
+            var row = _zones.FirstOrDefault(z => z.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบโซนนี้");
+            var used = _manifests.SelectMany(m => m.Stops).Count(s => s.DeliveryZoneId == id)
+                     + ListPendingStops().Count(s => s.DeliveryZoneId == id)
+                     + _routes.Count(r => r.DeliveryZoneIds.Contains(id));
+            if (used > 0) throw InUse("โซนจัดส่ง", row.Code, "จุดส่งและสายส่ง", used);
+            _zones = [.. _zones.Where(z => z.Id != id)];
+        }
+    }
+
+    public void DeleteRoute(string id)
+    {
+        lock (_gate)
+        {
+            var row = _routes.FirstOrDefault(r => r.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบสายส่งนี้");
+            var used = _manifests.Count(m => m.RouteId == id);
+            if (used > 0) throw InUse("สายส่ง", row.Code, "ใบปิดบรรทุก", used);
+            _routes = [.. _routes.Where(r => r.Id != id)];
+        }
+    }
+
+    public void DeleteCarrier(string id)
+    {
+        lock (_gate)
+        {
+            var row = _carriers.FirstOrDefault(c => c.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบผู้ให้บริการนี้");
+            var used = _manifests.Count(m => m.CarrierId == id)
+                     + _vehicles.Count(v => v.CarrierId == id)
+                     + _drivers.Count(d => d.CarrierId == id);
+            if (used > 0) throw InUse("ผู้ให้บริการ", row.Code, "ใบปิดบรรทุก รถ และพนักงานขับรถ", used);
+            _carriers = [.. _carriers.Where(c => c.Id != id)];
+        }
+    }
+
+    public void DeleteVehicle(string id)
+    {
+        lock (_gate)
+        {
+            var row = _vehicles.FirstOrDefault(v => v.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบรถคันนี้");
+            var used = _manifests.Count(m => m.PlateHead == row.PlateHead);
+            if (used > 0) throw InUse("รถ", row.PlateHead, "ใบปิดบรรทุก", used);
+            _vehicles = [.. _vehicles.Where(v => v.Id != id)];
+        }
+    }
+
+    public void DeleteDriver(string id)
+    {
+        lock (_gate)
+        {
+            var row = _drivers.FirstOrDefault(d => d.Id == id)
+                ?? throw DomainException.NotFound("ไม่พบพนักงานขับรถคนนี้");
+            var used = _manifests.Count(m => m.DriverId == id);
+            if (used > 0) throw InUse("พนักงานขับรถ", row.Code, "ใบปิดบรรทุก", used);
+            _drivers = [.. _drivers.Where(d => d.Id != id)];
+        }
+    }
 }
 
 /// <summary>Both documents the issue step writes, in the shape the client destructures.</summary>

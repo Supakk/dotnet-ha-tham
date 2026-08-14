@@ -105,6 +105,7 @@ convenience. Direct API calls must still be rejected when they break the domain.
 | Freight cost is derived from `tripPrice + priceAdd - priceDeduct` | `FreightPricing.Total()` |
 | Master codes and vehicle plates must stay unique | `Assert...Free` in `TmsStore`, `MasterWrites` against the database |
 | One district can belong to only one delivery zone | `AssertAreasFree` / `AssertDistrictsFree` |
+| A master record still referenced by a document cannot be deleted | `AssertNothingReferences` / `TmsStore.Delete*` |
 | Integration secrets are returned masked, never as raw stored values | `IntegrationConfigStore` |
 
 ## API Smoke Tests

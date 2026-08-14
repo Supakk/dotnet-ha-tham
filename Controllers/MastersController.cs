@@ -26,6 +26,14 @@ public sealed class WarehousesController(MasterQueries queries) : ControllerBase
     [HttpPut("{id}")]
     public ActionResult<Warehouse> Update(string id, [FromBody] Warehouse input) =>
         queries.UpdateWarehouse(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteWarehouse(id); return NoContent(); }
 }
 
 /// <summary>
@@ -47,6 +55,14 @@ public sealed class DeliveryZonesController(MasterQueries queries) : ControllerB
     [HttpPut("{id}")]
     public ActionResult<DeliveryZone> Update(string id, [FromBody] DeliveryZone input) =>
         queries.UpdateZone(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteZone(id); return NoContent(); }
 }
 
 [ApiController]
@@ -62,6 +78,14 @@ public sealed class RoutesController(MasterQueries queries) : ControllerBase
     [HttpPut("{id}")]
     public ActionResult<RouteMaster> Update(string id, [FromBody] RouteMaster input) =>
         queries.UpdateRoute(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteRoute(id); return NoContent(); }
 }
 
 [ApiController]
@@ -77,6 +101,14 @@ public sealed class CarriersController(MasterQueries queries) : ControllerBase
     [HttpPut("{id}")]
     public ActionResult<Carrier> Update(string id, [FromBody] Carrier input) =>
         queries.UpdateCarrier(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteCarrier(id); return NoContent(); }
 }
 
 [ApiController]
@@ -92,6 +124,14 @@ public sealed class FleetVehiclesController(MasterQueries queries) : ControllerB
     [HttpPut("{id}")]
     public ActionResult<FleetVehicle> Update(string id, [FromBody] FleetVehicle input) =>
         queries.UpdateVehicle(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteVehicle(id); return NoContent(); }
 }
 
 [ApiController]
@@ -107,6 +147,14 @@ public sealed class DriversController(MasterQueries queries) : ControllerBase
     [HttpPut("{id}")]
     public ActionResult<Driver> Update(string id, [FromBody] Driver input) =>
         queries.UpdateDriver(id, input);
+
+    /// <summary>
+    /// Removes the record outright. Refused when anything still points at
+    /// it — deactivating is the answer for a row with history, and the
+    /// error says so. This exists for the one typed in by mistake.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { queries.DeleteDriver(id); return NoContent(); }
 }
 
 /// <summary>
