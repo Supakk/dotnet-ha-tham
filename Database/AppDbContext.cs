@@ -51,6 +51,20 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.SerialKey).HasColumnName("SERIALKEY");
             e.Property(x => x.WhseId).HasColumnName("WHSEID");
             e.Property(x => x.Description).HasColumnName("description");
+            // Added by 02-alter-existing.sql section C — the base table holds a
+            // code and a description and nothing the setup form asks for.
+            e.Property(x => x.Name).HasColumnName("WHSENAME");
+            e.Property(x => x.Address1).HasColumnName("ADDRESS1");
+            e.Property(x => x.SubDistrict).HasColumnName("SUBDISTRICT");
+            e.Property(x => x.District).HasColumnName("DISTRICT");
+            e.Property(x => x.Province).HasColumnName("PROVINCE");
+            e.Property(x => x.PostalCode).HasColumnName("POSTALCODE");
+            e.Property(x => x.Latitude).HasColumnName("LATITUDE");
+            e.Property(x => x.Longitude).HasColumnName("LONGITUDE");
+            e.Property(x => x.IsDc).HasColumnName("IS_DC");
+            e.Property(x => x.Status).HasColumnName("STATUS");
+            e.Property(x => x.AddDate).HasColumnName("ADDDATE");
+            e.Property(x => x.Type).HasColumnName("type");
         });
 
         b.Entity<ZoneRow>(e =>
@@ -65,6 +79,10 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.District).HasColumnName("DISTRICT");
             e.Property(x => x.DefaultRoute).HasColumnName("DEFAULTROUTE");
             e.Property(x => x.Status).HasColumnName("STATUS");
+            // Added by 02 section C: the weight limit the zone form asks for.
+            e.Property(x => x.MaxVehicleWeight).HasColumnName("MAX_VEHICLE_WEIGHT");
+            e.Property(x => x.WeightUom).HasColumnName("WEIGHT_UOM");
+            e.Property(x => x.AddDate).HasColumnName("ADDDATE");
         });
 
         b.Entity<ZoneCoverageRow>(e =>
@@ -73,9 +91,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasKey(x => x.SerialKey);
             e.Property(x => x.SerialKey).HasColumnName("SERIALKEY");
             e.Property(x => x.WhseId).HasColumnName("WHSEID");
+            e.Property(x => x.OwnerKey).HasColumnName("OWNERKEY");
             e.Property(x => x.ZoneKey).HasColumnName("TRANSPORTZONEKEY");
             e.Property(x => x.Province).HasColumnName("PROVINCE");
             e.Property(x => x.District).HasColumnName("DISTRICT");
+            e.Property(x => x.Status).HasColumnName("STATUS");
+            e.Property(x => x.AddDate).HasColumnName("ADDDATE");
         });
 
         b.Entity<RouteRow>(e =>
@@ -95,8 +116,12 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.HasKey(x => x.SerialKey);
             e.Property(x => x.SerialKey).HasColumnName("SERIALKEY");
             e.Property(x => x.Route).HasColumnName("ROUTE");
+            e.Property(x => x.WhseId).HasColumnName("WHSEID");
+            e.Property(x => x.OwnerKey).HasColumnName("OWNERKEY");
             e.Property(x => x.ZoneKey).HasColumnName("TRANSPORTZONEKEY");
             e.Property(x => x.Sequence).HasColumnName("SEQUENCE");
+            e.Property(x => x.Status).HasColumnName("STATUS");
+            e.Property(x => x.AddDate).HasColumnName("ADDDATE");
         });
 
         b.Entity<TransporterRow>(e =>
@@ -200,6 +225,19 @@ public sealed class WhseRow
     public int SerialKey { get; set; }
     public string? WhseId { get; set; }
     public string? Description { get; set; }
+    public string? Name { get; set; }
+    public string? Address1 { get; set; }
+    public string? SubDistrict { get; set; }
+    public string? District { get; set; }
+    public string? Province { get; set; }
+    public string? PostalCode { get; set; }
+    public decimal? Latitude { get; set; }
+    public decimal? Longitude { get; set; }
+    public bool? IsDc { get; set; }
+    public string? Status { get; set; }
+    public DateTime AddDate { get; set; }
+    /// <summary>CK_site_type allows only 'E' or 'S'; nothing records what either means.</summary>
+    public string? Type { get; set; }
 }
 
 public sealed class ZoneRow
@@ -212,15 +250,21 @@ public sealed class ZoneRow
     public string? District { get; set; }
     public string? DefaultRoute { get; set; }
     public string Status { get; set; } = "";
+    public decimal? MaxVehicleWeight { get; set; }
+    public string? WeightUom { get; set; }
+    public DateTime AddDate { get; set; }
 }
 
 public sealed class ZoneCoverageRow
 {
     public int SerialKey { get; set; }
     public string WhseId { get; set; } = "";
+    public string OwnerKey { get; set; } = "";
     public string ZoneKey { get; set; } = "";
     public string Province { get; set; } = "";
     public string? District { get; set; }
+    public string Status { get; set; } = "";
+    public DateTime AddDate { get; set; }
 }
 
 public sealed class RouteRow
@@ -236,8 +280,12 @@ public sealed class RouteZoneRow
 {
     public int SerialKey { get; set; }
     public string Route { get; set; } = "";
+    public string WhseId { get; set; } = "";
+    public string OwnerKey { get; set; } = "";
     public string ZoneKey { get; set; } = "";
     public int Sequence { get; set; }
+    public string Status { get; set; } = "";
+    public DateTime AddDate { get; set; }
 }
 
 public sealed class TransporterRow

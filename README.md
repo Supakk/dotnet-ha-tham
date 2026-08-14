@@ -7,8 +7,10 @@ smoke tests and development data generation.
 
 ## Current State
 
-This backend stores data **in memory**. Restarting the API resets all transport
-plans, manifests, pending stops, master data, and generated rows back to the
+Master data — warehouses, zones, routes, carriers, vehicles, drivers — is read
+from and written to SQL Server when a connection string is configured; see
+**Database Mode** below. Transport documents (plans, manifests, the pending
+pool) are still **in memory**, so restarting the API resets those back to the
 seed data.
 
 The core transport business rules are already enforced on the server, but the
@@ -81,7 +83,7 @@ server connection error.
 | `Dtos/` | Request bodies accepted from clients |
 | `Middleware/` | Error handling and JSON error responses |
 | `Services/` | JWT key handling and token creation |
-| `Database/` | EF Core context and the read path onto SQL Server |
+| `Database/` | EF Core context, plus the read and write paths onto SQL Server |
 | `tests/` | Python smoke tests and data generation helpers |
 | `docs/data-model/` | SQL Server data-model notes and local DB scripts |
 
@@ -101,8 +103,8 @@ convenience. Direct API calls must still be rejected when they break the domain.
 | Cancelling a plan or manifest returns its stops to the pending pool | `CancelPlan` / `CancelManifest` |
 | Route colours are assigned and preserved by the server | `CreateManifest` / `UpdateManifest` |
 | Freight cost is derived from `tripPrice + priceAdd - priceDeduct` | `FreightPricing.Total()` |
-| Master codes and vehicle plates must stay unique | `Assert...Free` methods |
-| One district can belong to only one delivery zone | `AssertAreasFree` |
+| Master codes and vehicle plates must stay unique | `Assert...Free` in `TmsStore`, `MasterWrites` against the database |
+| One district can belong to only one delivery zone | `AssertAreasFree` / `AssertDistrictsFree` |
 | Integration secrets are returned masked, never as raw stored values | `IntegrationConfigStore` |
 
 ## API Smoke Tests
@@ -225,9 +227,26 @@ cd docs\data-model
 .\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB" -Seed
 ```
 
-Reading is wired up: `/warehouses`, `/delivery-zones`, `/routes`, `/carriers`,
-`/fleet-vehicles` and `/drivers` are served from the database via
-`Database/AppDbContext.cs` and `Database/MasterQueries.cs`.
+Master data is fully wired: `/warehouses`, `/delivery-zones`, `/routes`,
+`/carriers`, `/fleet-vehicles` and `/drivers` read **and write** through
+`Database/AppDbContext.cs`, `MasterQueries.cs` (reads) and `MasterWrites.cs`
+(creates and updates). A row created on a setup screen is in SQL Server and is
+still there after a restart.
+
+### The Code Is The Key
+
+In the in-memory store an id was a counter and the code was an ordinary field,
+so it could be edited freely. In the database the code **is** the primary key —
+`TRANSPORTERKEY`, `ROUTE`, `TRANSPORTZONEKEY` — and other tables point at it.
+
+An update that changes the code is refused, with a message saying to create a
+new record and retire the old one. Renaming would orphan every vehicle, driver
+and document naming it. This is the one behaviour that differs between the two
+modes, and the database's is the correct one.
+
+Transport documents — manifests, plans, the pending pool — are still in memory.
+They are the ones with the movement rules, and moving them needs transactions so
+that "an order is in one place only" survives two requests arriving together.
 
 ### SO Means Shipment Order
 
@@ -241,21 +260,6 @@ diagram labels a table `DOC_SO_HDR` and means `DOC_DO_HDR`; the frontend's
 `utils/shipmentOrders.ts` names a *screen*, not a document. `docs/data-model/README.md`
 section 0.0 lays out every spelling and what each one actually refers to. Read
 it before adding anything with SO in the name.
-
-### Reads Only — And What That Costs
-
-Writes still go to the in-memory stores, which own the business rules. Two
-consequences follow, and both are visible rather than subtle:
-
-- A row created by `POST /carriers` does **not** appear in `GET /carriers`. They
-  are no longer the same collection.
-- Master ids differ between the two sources. The database derives them from the
-  real keys (`cr-CR-001`), while manifests still come from the seed and name
-  `cr-1`. A manifest's `carrierId` therefore matches nothing in a database-backed
-  carrier list.
-
-Neither is a defect to be worked around; both are what a half-migrated system
-looks like. They disappear when the documents move across too.
 
 ### What Is Left
 

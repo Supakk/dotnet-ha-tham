@@ -301,6 +301,44 @@ GO
    C · คอลัมน์ที่จอที่มีอยู่ต้องใช้ แต่ตารางไม่มี
 ============================================================================= */
 
+/* --- MST_WHSE: จอตั้งค่าคลังกรอกได้มากกว่าที่ตารางเก็บได้มาก ---------------
+   ตารางนี้มีแค่ `WHSEID` กับ `description` (และคอลัมน์ระบบอย่าง RowPointer)
+   ส่วนฟอร์ม "คลัง / ศูนย์กระจายสินค้า" กรอกที่อยู่ ตำบล อำเภอ จังหวัด
+   รหัสไปรษณีย์ พิกัด และธงว่าเป็น DC หรือไม่ — **ทุกอย่างนอกจากชื่อจะหายไป
+   ตอนบันทึก** ซึ่งแย่กว่าบันทึกไม่ได้เลย เพราะหน้าจอจะบอกว่าสำเร็จ
+
+   พิกัดเป็น decimal(18,10) เท่ากับ DOC_SHIPMENT_STOP.LATITUDE/LONGITUDE
+   ที่ฐานใช้อยู่แล้ว จะได้เทียบระยะทางกันได้ตรง ไม่ใช่ข้อความอย่าง MST_SHIPTO.gps1 */
+ALTER TABLE [dbo].[MST_WHSE] ADD
+    [WHSENAME]     [nvarchar](200)  NULL,   -- description เป็นคำบรรยาย ไม่ใช่ชื่อที่พิมพ์บนเอกสาร
+    [ADDRESS1]     [nvarchar](200)  NULL,
+    [SUBDISTRICT]  [nvarchar](100)  NULL,
+    [DISTRICT]     [nvarchar](100)  NULL,
+    [PROVINCE]     [nvarchar](100)  NULL,
+    [POSTALCODE]   [nvarchar](10)   NULL,
+    [LATITUDE]     [decimal](18,10) NULL,
+    [LONGITUDE]    [decimal](18,10) NULL,
+    /* สายส่งเริ่มต้นจากที่นี่ได้หรือไม่ — คลังที่มีไว้หยิบของอย่างเดียวไม่ใช่ต้นทาง */
+    [IS_DC]        [bit]            NULL,
+    [STATUS]       [nvarchar](10)   NULL
+GO
+
+/* พิกัดต้องมาเป็นคู่ ครึ่งเดียววาดแผนที่ไม่ได้ — กฎเดียวกับ MST_CUSTOMER */
+ALTER TABLE [dbo].[MST_WHSE] WITH CHECK ADD CONSTRAINT [CK_MST_WHSE_LATLNG]
+    CHECK (([LATITUDE] IS NULL AND [LONGITUDE] IS NULL)
+        OR ([LATITUDE] IS NOT NULL AND [LONGITUDE] IS NOT NULL))
+GO
+
+/* --- MST_TRANSPORTATIONZONE: น้ำหนักรถสูงสุดที่เข้าพื้นที่ได้ --------------
+   จอตั้งค่าโซนกรอกค่านี้ (สะพานรับน้ำหนัก ซอยแคบ เขตห้ามรถบรรทุก) แต่ตาราง
+   ไม่มีที่เก็บ · เคยเสนอไว้ตอน R02 แล้วไม่ได้ทำเพราะยังไม่มีจอไหนใช้ — ตอนนี้มีแล้ว
+   เก็บหน่วยแยกคอลัมน์เพราะฟอร์มให้เลือก kg หรือ ton และแปลงหน่วยตอนบันทึก
+   จะทำให้ค่าที่ผู้ใช้กรอกกับค่าที่เห็นตอนเปิดกลับมาไม่ตรงกัน */
+ALTER TABLE [dbo].[MST_TRANSPORTATIONZONE] ADD
+    [MAX_VEHICLE_WEIGHT] [decimal](22,5) NULL,
+    [WEIGHT_UOM]         [nvarchar](10)  NULL
+GO
+
 /* --- DOC_SHIPMENT_HDR ----------------------------------------------------
    มีของครบกว่าที่ไดอะแกรมวาดไว้มาก (LICENSEPLATE, DRIVERNAME, DRIVERMOBILE,
    TRAILERID, PLANNED/ACTUAL DEPARTURE+ARRIVAL, TOTAL*, MAX*, UTILIZATION_*,

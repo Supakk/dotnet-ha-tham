@@ -20,7 +20,7 @@ namespace Mammod.Database;
 /// step, and it needs transactions to keep "an order is in one place only" true
 /// when two requests arrive at once — which is why it is not bundled in here.
 /// </summary>
-public sealed class MasterQueries(
+public sealed partial class MasterQueries(
     TmsStore store,
     IServiceScopeFactory scopes,
     bool useDatabase)
@@ -55,12 +55,22 @@ public sealed class MasterQueries(
             {
                 Id = $"wh-{w.WhseId}",
                 Code = w.WhseId!,
-                Name = w.Description ?? w.WhseId!,
-                // MST_WHSE carries no address and no coordinates — the columns
-                // simply do not exist on it. Left empty rather than invented;
-                // null Position is how the client says "nobody has pinned it".
-                IsDC = true,
-                Active = true,
+                Name = w.Name ?? w.Description ?? w.WhseId!,
+                Address = w.Address1 ?? "",
+                SubDistrict = w.SubDistrict ?? "",
+                District = w.District ?? "",
+                Province = w.Province ?? "",
+                ZipCode = w.PostalCode ?? "",
+                // null, not [0, 0] — the client tests for a missing pin, and the
+                // origin of the Atlantic is not a warehouse in Nakhon Ratchasima.
+                Position = w.Latitude is null || w.Longitude is null
+                    ? null
+                    : [(double)w.Latitude.Value, (double)w.Longitude.Value],
+                // Rows seeded before IS_DC existed have null. Treated as a DC,
+                // because the alternative hides every one of them from the origin
+                // picker and a route with no origin cannot be planned at all.
+                IsDC = w.IsDc ?? true,
+                Active = IsActive(w.Status),
             })
             .ToList());
     }
@@ -93,10 +103,8 @@ public sealed class MasterQueries(
                 District = "",
                 SubDistrict = "",
                 ZipCode = "",
-                // MAX_VEHICLE_WEIGHT was proposed and not added, so there is
-                // nothing to read — see 01-new-tables.sql section 2.
-                Weight = 0,
-                WeightUnit = "kg",
+                Weight = (double)(z.MaxVehicleWeight ?? 0),
+                WeightUnit = string.IsNullOrWhiteSpace(z.WeightUom) ? "kg" : z.WeightUom,
             }).ToList();
         });
     }

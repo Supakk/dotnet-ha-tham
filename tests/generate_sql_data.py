@@ -527,9 +527,12 @@ PRINT 'clearing previous demo rows';
     # ไม่มีตารางรหัสบอกว่าสองตัวนี้แปลว่าอะไร (S = site น่าจะใช่ ส่วน E ยังไม่รู้)
     # เป็นตัวอย่างของ "ค่า STATUS/รหัสที่เดาไม่ได้" ใน README หัวข้อ 5 ข้อ 2
     emit("MST_WHSE",
-         ["WHSEID", "description", "type", "lang_code", "time_zone", "ADDDATE", "ADDWHO"],
-         [(code, name, "S", "th-TH", "Asia/Bangkok", now, "seed")
-          for code, name, *_ in WAREHOUSES])
+         ["WHSEID", "description", "WHSENAME", "type", "lang_code", "time_zone",
+          "ADDRESS1", "SUBDISTRICT", "DISTRICT", "PROVINCE", "POSTALCODE",
+          "LATITUDE", "LONGITUDE", "IS_DC", "STATUS", "ADDDATE", "ADDWHO"],
+         [(code, name, name, "S", "th-TH", "Asia/Bangkok",
+           "", sub, dist, prov, zipcode, lat, lng, True, "ACTIVE", now, "seed")
+          for code, name, prov, dist, sub, zipcode, lat, lng in WAREHOUSES])
 
     # ── MST_OWNER ───────────────────────────────────────────────────────────
     owner = with_defaults(OWNER_DEFAULTS, OWNERKEY=OWNER, WHSEID=WHSE, ADDDATE=now, ADDWHO="seed")
@@ -548,11 +551,11 @@ PRINT 'clearing previous demo rows';
     default_route = {z: r for r, _n, _o, zones, _c, _s in ROUTES for z in zones}
     emit("MST_TRANSPORTATIONZONE",
          ["WHSEID", "OWNERKEY", "TRANSPORTZONEKEY", "TRANSPORTZONENAME", "COUNTRY",
-          "PROVINCE", "DELIVERYLEADDAY", "DEFAULTROUTE", "PRIORITY", "STATUS",
-          "ADDDATE", "ADDWHO"],
+          "PROVINCE", "DELIVERYLEADDAY", "DEFAULTROUTE", "PRIORITY",
+          "MAX_VEHICLE_WEIGHT", "WEIGHT_UOM", "STATUS", "ADDDATE", "ADDWHO"],
          [(WHSE, OWNER20, key, name, "TH", province, 1 + i % 3,
-           default_route.get(key), i + 1, "ACTIVE", now, "seed")
-          for i, (key, name, province, _districts, _w) in enumerate(ZONES)])
+           default_route.get(key), i + 1, weight, "kg", "ACTIVE", now, "seed")
+          for i, (key, name, province, _districts, weight) in enumerate(ZONES)])
 
     # ── MST_ZONE_COVERAGE ───────────────────────────────────────────────────
     emit("MST_ZONE_COVERAGE",
