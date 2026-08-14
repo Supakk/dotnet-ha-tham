@@ -1,10 +1,12 @@
 using System.Text.Encodings.Web;
 using System.Text.Json.Serialization;
 using Mammod.Data;
+using Mammod.Database;
 using Mammod.Middleware;
 using Mammod.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Authorization;
+using Microsoft.EntityFrameworkCore;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -33,6 +35,32 @@ builder.Services.AddControllers().AddJsonOptions(options =>
 builder.Services.AddSingleton<TmsStore>();
 builder.Services.AddSingleton<DeliveryOrderStore>();
 builder.Services.AddSingleton<IntegrationConfigStore>();
+
+// ── ฐานข้อมูล · optional ────────────────────────────────────────────────────
+//
+// มี connection string ชื่อ Mmdev = อ่าน master กับใบสั่งขายจาก SQL Server
+// ไม่มี = ทำงานบน seed ในหน่วยความจำเหมือนเดิมทุกอย่าง
+//
+// เป็นทางเลือกไม่ใช่ข้อบังคับ เพราะโปรเจคนี้ต้องรันได้ด้วย `dotnet run` เปล่า ๆ
+// สำหรับคนที่ยังไม่ได้ลง SQL Server และเพราะ smoke test กับ fixture ฝั่ง frontend
+// พึ่งพาข้อมูลชุดที่รู้ค่าแน่นอน
+//
+// ⚠ ตอนนี้ **อ่านอย่างเดียว** การเขียนยังลงหน่วยความจำ แปลว่าถ้าเปิดฐานไว้
+//   แถวที่สร้างผ่าน POST /carriers จะไม่โผล่ใน GET /carriers เพราะคนละที่เก็บ
+//   ย้ายการเขียนตามไปเป็นงานถัดไป ซึ่งต้องมี transaction คุมกติกา
+//   "ใบสั่งส่งอยู่ได้ที่เดียว" ตอนมีคนใช้พร้อมกัน จึงยังไม่รวมมาในรอบนี้
+var connectionString = builder.Configuration.GetConnectionString("Mmdev");
+var useDatabase = !string.IsNullOrWhiteSpace(connectionString);
+
+if (useDatabase)
+{
+    builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+}
+
+builder.Services.AddSingleton(sp => new MasterQueries(
+    sp.GetRequiredService<TmsStore>(),
+    sp.GetRequiredService<IServiceScopeFactory>(),
+    useDatabase));
 // หากุญแจตรงนี้ ตอน startup ไม่ใช่ปล่อยให้ DI ไปหาตอนมี request แรก — เซิร์ฟเวอร์ที่
 // ตั้งค่าไม่ครบต้องไม่ขึ้น ดีกว่าขึ้นแล้วพังตอนคนแรกกด login
 var tokenService = new TokenService(

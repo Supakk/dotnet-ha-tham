@@ -13,7 +13,7 @@
 | [`er-transport-shipment.mmd`](./er-transport-shipment.mmd) | ER ฝั่งขนส่งตามของจริง + ที่เสนอเพิ่ม |
 | [`er-wms-core.mmd`](./er-wms-core.mmd) | ER ฝั่งคลังตามของจริง |
 | [`00-user-defined-types.sql`](./00-user-defined-types.sql) | UDT 21 ตัวที่ script ฐานอ้างถึงแต่ไม่ได้แนบมา — ไม่มีอันนี้ สร้างฐานเปล่าไม่ได้เลย |
-| [`01-new-tables.sql`](./01-new-tables.sql) | **10 ตารางใหม่** ตามธรรมเนียมของฐานจริง |
+| [`01-new-tables.sql`](./01-new-tables.sql) | **12 ตารางใหม่** ตามธรรมเนียมของฐานจริง (รวมชั้นใบสั่งขาย `DOC_SO_HDR` / `_DETAIL`) |
 | [`02-alter-existing.sql`](./02-alter-existing.sql) | ชนิดข้อมูลที่ต้องอุดก่อน · PK ที่หายไป · float→decimal · คอลัมน์ที่ขาด · FK · ดัชนี · rowversion |
 | [`03-seed-demo-data.sql`](./03-seed-demo-data.sql) | ข้อมูลตัวอย่าง **สร้างอัตโนมัติ ห้ามแก้ด้วยมือ** — ที่มาคือ [`tests/generate_sql_data.py`](../../tests/generate_sql_data.py) |
 | [`build-local-db.ps1`](./build-local-db.ps1) | รันทุกไฟล์ตามลำดับ สร้างฐาน `MMDEV` ในเครื่องขึ้นใหม่ทั้งใบ (`-Seed` เพื่อใส่ข้อมูลตัวอย่างด้วย) |
@@ -264,6 +264,7 @@ same length and scale" FK จึงสร้างไม่ขึ้น แต�
 | ~~`MST_DELIVERY_ZONE`~~ | **ถอนออก — R03 มี `MST_TRANSPORTATIONZONE` แล้ว** สร้างซ้ำจะได้โซนสองชุดที่ไม่ตรงกัน |
 | `MST_ZONE_COVERAGE` | โซน ↔ จังหวัด/อำเภอ/ตำบล/ไปรษณีย์ · เป็น **ลูก** ของ `MST_TRANSPORTATIONZONE` เพราะตัวแม่ถือกฎพื้นที่ได้โซนละกฎเดียว |
 | `MST_ROUTE_ZONE` | สายส่ง ↔ โซน + ลำดับการวิ่ง (ไม่มี "สายหลัก" แล้ว — `MST_TRANSPORTATIONZONE.DEFAULTROUTE` ถืออยู่) |
+| `DOC_SO_HDR` / `_DETAIL` | **ใบสั่งขาย** ฐานเดิมไม่มีเลย มีแต่เลข SO เป็นข้อความใน `DOC_DO_HDR.EXTERNORDERKEY` → ตอบไม่ได้ว่า SO ใบหนึ่งสั่งอะไร ส่งครบหรือยัง และแตกเป็น DO กี่ใบ · ความสัมพันธ์คือ **SO 1 ใบ → DO ได้หลายใบ** |
 | `DOC_TRANSPORT_PLAN` / `_LINE` | ชั้นแผน `PL-…` ที่ออกใบปิดบรรทุก |
 | `DOC_SHIPMENT_STATUS_LOG` | timeline 5 ขั้น + ข้อความที่ WMS/OMS ตีกลับ |
 | `MST_CUSTOMER` | ตารางลูกค้าที่ FK ชี้ได้จริง — `MST_SHIPTO` ทำหน้าที่นี้ไม่ได้เพราะ `SHIPTO` ไม่ unique, ที่อยู่เป็นแบบตะวันตก, พิกัดเป็นข้อความ |
@@ -384,10 +385,10 @@ cd docs\data-model
 ผลลัพธ์ที่ถูกต้อง:
 
 ```text
-tables       59
-primary keys 59
-foreign keys 41
-indexes      15
+tables       61
+primary keys 61
+foreign keys 45
+indexes      18
 tables without a primary key: none
 ```
 

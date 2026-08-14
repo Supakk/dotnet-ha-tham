@@ -1,4 +1,5 @@
 using Mammod.Data;
+using Mammod.Database;
 using Mammod.Models;
 using Microsoft.AspNetCore.Mvc;
 
@@ -14,10 +15,10 @@ namespace Mammod.Controllers;
 
 [ApiController]
 [Route("warehouses")]
-public sealed class WarehousesController(TmsStore store) : ControllerBase
+public sealed class WarehousesController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<Warehouse>> List() => store.ListWarehouses();
+    public ActionResult<List<Warehouse>> List() => queries.Warehouses();
 
     [HttpPost]
     public ActionResult<Warehouse> Create([FromBody] Warehouse input) => store.CreateWarehouse(input);
@@ -35,10 +36,10 @@ public sealed class WarehousesController(TmsStore store) : ControllerBase
 /// </summary>
 [ApiController]
 [Route("delivery-zones")]
-public sealed class DeliveryZonesController(TmsStore store) : ControllerBase
+public sealed class DeliveryZonesController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<DeliveryZone>> List() => store.ListZones();
+    public ActionResult<List<DeliveryZone>> List() => queries.Zones();
 
     [HttpPost]
     public ActionResult<DeliveryZone> Create([FromBody] DeliveryZone input) => store.CreateZone(input);
@@ -50,10 +51,10 @@ public sealed class DeliveryZonesController(TmsStore store) : ControllerBase
 
 [ApiController]
 [Route("routes")]
-public sealed class RoutesController(TmsStore store) : ControllerBase
+public sealed class RoutesController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<RouteMaster>> List() => store.ListRoutes();
+    public ActionResult<List<RouteMaster>> List() => queries.Routes();
 
     [HttpPost]
     public ActionResult<RouteMaster> Create([FromBody] RouteMaster input) => store.CreateRoute(input);
@@ -65,10 +66,10 @@ public sealed class RoutesController(TmsStore store) : ControllerBase
 
 [ApiController]
 [Route("carriers")]
-public sealed class CarriersController(TmsStore store) : ControllerBase
+public sealed class CarriersController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<Carrier>> List() => store.ListCarriers();
+    public ActionResult<List<Carrier>> List() => queries.Carriers();
 
     [HttpPost]
     public ActionResult<Carrier> Create([FromBody] Carrier input) => store.CreateCarrier(input);
@@ -80,10 +81,10 @@ public sealed class CarriersController(TmsStore store) : ControllerBase
 
 [ApiController]
 [Route("fleet-vehicles")]
-public sealed class FleetVehiclesController(TmsStore store) : ControllerBase
+public sealed class FleetVehiclesController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<FleetVehicle>> List() => store.ListVehicles();
+    public ActionResult<List<FleetVehicle>> List() => queries.Vehicles();
 
     [HttpPost]
     public ActionResult<FleetVehicle> Create([FromBody] FleetVehicle input) => store.CreateVehicle(input);
@@ -95,10 +96,10 @@ public sealed class FleetVehiclesController(TmsStore store) : ControllerBase
 
 [ApiController]
 [Route("drivers")]
-public sealed class DriversController(TmsStore store) : ControllerBase
+public sealed class DriversController(TmsStore store, MasterQueries queries) : ControllerBase
 {
     [HttpGet]
-    public ActionResult<List<Driver>> List() => store.ListDrivers();
+    public ActionResult<List<Driver>> List() => queries.Drivers();
 
     [HttpPost]
     public ActionResult<Driver> Create([FromBody] Driver input) => store.CreateDriver(input);

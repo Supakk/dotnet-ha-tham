@@ -318,32 +318,140 @@ def rows_from_dicts(dicts: list[dict[str, Any]]) -> tuple[list[str], list[list[A
 # Generated volume
 # ─────────────────────────────────────────────────────────────────────────────
 
-def generated_orders(count: int, rng: random.Random) -> list[dict[str, Any]]:
-    """Delivery orders spread across customers, warehouses and due dates.
+class Counter:
+    """Document numbers, issued in one place so no two documents collide."""
 
-    Spread on purpose: a pending pool where every row is due the same day cannot
-    show whether the "how late is this" column works.
+    def __init__(self) -> None:
+        self.so = 0
+        self.do = 0
+
+    def next_so(self) -> str:
+        self.so += 1
+        return f"SO-99{200000 + self.so}"
+
+    def next_do(self) -> str:
+        self.do += 1
+        return f"DO-2026-{9000 + self.do}"
+
+
+def sales_order(counter: Counter, customer: tuple, whse: str, rng: random.Random,
+                order_day: date, requested: date) -> dict[str, Any]:
+    """One sales order: what a customer asked for, before anything is shipped.
+
+    Lines carry ORDERQTY only. SHIPPEDQTY is filled in afterwards from the
+    delivery orders actually raised against it, so the two can never disagree —
+    that number is the whole reason the SO layer exists.
     """
-    orders = []
-    for index in range(1, count + 1):
-        customer = rng.choice(CUSTOMERS)
-        # Weighted towards the near past so most orders look current, with a
-        # tail of genuinely late ones for the overdue styling to catch.
-        offset = rng.choice([-12, -8, -5, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7])
-        orders.append({
-            "orderkey": f"DO-2026-{9000 + index}",
-            "extern": f"SO-99{200000 + index}",
-            "customer": customer[0],
+    lines = []
+    for line_no, (sku, _descr, weight, cube, uom) in enumerate(
+            rng.sample(SKUS, rng.randint(1, 4)), start=1):
+        qty = rng.randint(20, 400)
+        price = round(18 + (hash(sku) % 40), 2)
+        lines.append({
+            "line": f"{line_no:05d}", "sku": sku, "uom": uom, "qty": qty,
+            "price": price, "weight": weight, "cube": cube, "shipped": 0,
+        })
+    return {
+        "sokey": counter.next_so(),
+        "whse": whse,
+        "customer": customer[0],
+        "shipto": customer[0],
+        "orderdate": datetime.combine(order_day, datetime.min.time())
+                     + timedelta(hours=rng.randint(6, 18)),
+        "requested": requested,
+        "lines": lines,
+        "dos": [],
+    }
+
+
+def delivery_orders_for(so: dict[str, Any], counter: Counter, rng: random.Random,
+                        splits: int, due: date, status: str,
+                        raise_only: int | None = None) -> list[dict[str, Any]]:
+    """Raise delivery orders against one sales order.
+
+    A sales order is what was ordered; a delivery order is one lorry-load of it
+    leaving a warehouse. One order shipped in two runs is ordinary — stock ran
+    short, the customer asked for it in parts, or it comes from two warehouses —
+    so this is deliberately not one-to-one. Quantities are divided across the
+    splits and never exceed what the line ordered, which is what
+    CK_DOC_SO_DETAIL_QTY enforces on the way in.
+
+    `raise_only` stops early, leaving part of the order still to ship. That is
+    what puts a sales order in PARTIAL, and it is the state worth having in the
+    data: a set where every order is complete never exercises the arithmetic
+    that the SO layer exists to do.
+    """
+    customer = customer_row(so["customer"])
+    dos = []
+    for split in range(splits):
+        if raise_only is not None and split >= raise_only:
+            break
+        lines = []
+        for line in so["lines"]:
+            remaining = line["qty"] - line["shipped"]
+            if remaining <= 0:
+                continue
+            # The last split takes everything left, so nothing is stranded.
+            qty = remaining if split == splits - 1 else max(1, remaining // (splits - split))
+            line["shipped"] += qty
+            lines.append({**line, "qty": qty})
+        if not lines:
+            continue
+        dos.append({
+            "orderkey": counter.next_do(),
+            "sokey": so["sokey"],
+            "whse": so["whse"],
+            "customer": so["customer"],
             "zone": customer[7],
             "route": customer[8],
-            "warehouse": rng.choice(["WSK", "WPD", "WWP"]),
-            "orderdate": datetime.combine(TODAY - timedelta(days=rng.randint(1, 20)),
-                                          datetime.min.time()) + timedelta(hours=rng.randint(6, 18)),
-            "duedate": TODAY + timedelta(days=offset),
-            "lines": [(rng.choice(SKUS), rng.randint(5, 300)) for _ in range(rng.randint(1, 4))],
-            "status": "NEW",
+            "orderdate": so["orderdate"],
+            "duedate": due,
+            "lines": lines,
+            "status": status,
         })
-    return orders
+    so["dos"].extend(d["orderkey"] for d in dos)
+    return dos
+
+
+def so_status(so: dict[str, Any]) -> str:
+    ordered = sum(l["qty"] for l in so["lines"])
+    shipped = sum(l["shipped"] for l in so["lines"])
+    if shipped == 0:
+        return "NEW"
+    return "CLOSED" if shipped >= ordered else "PARTIAL"
+
+
+def generated_documents(count: int, rng: random.Random,
+                        counter: Counter) -> tuple[list[dict], list[dict]]:
+    """The pending pool: sales orders and the delivery orders raised from them.
+
+    Due dates are spread either side of the fixture date on purpose — a pool
+    where everything is due the same day cannot show whether the "how late is
+    this" column works.
+    """
+    sos, dos = [], []
+    for _ in range(count):
+        customer = rng.choice(CUSTOMERS)
+        whse = rng.choice(["WSK", "WPD", "WWP"])
+        order_day = TODAY - timedelta(days=rng.randint(1, 20))
+        due = TODAY + timedelta(days=rng.choice(
+            [-12, -8, -5, -3, -2, -1, 0, 1, 2, 3, 4, 5, 6, 7]))
+        so = sales_order(counter, customer, whse, rng, order_day, due)
+
+        # Three states worth having in the pool, because each is a different
+        # screen: an order nobody has acted on, one half out the door, and one
+        # finished. All three exist in a real day's work.
+        roll = rng.random()
+        if roll < 0.15:
+            pass                                    # NEW    — ยังไม่ออก DO เลย
+        elif roll < 0.40:
+            dos.extend(delivery_orders_for(        # PARTIAL — ออกไปครึ่งเดียว
+                so, counter, rng, 2, due, "NEW", raise_only=1))
+        else:
+            splits = 1 if rng.random() < 0.7 else 2  # CLOSED — ออกครบแล้ว
+            dos.extend(delivery_orders_for(so, counter, rng, splits, due, "NEW"))
+        sos.append(so)
+    return sos, dos
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -356,7 +464,9 @@ DELETE_ORDER = [
     "DOC_SHIPMENT_STATUS_LOG", "DOC_SHIPMENT_DETAIL_LINE", "DOC_SHIPMENT_DETAIL",
     "DOC_SHIPMENT_STOP", "DOC_SHIPMENT_HDR",
     "DOC_TRANSPORT_PLAN_LINE", "DOC_TRANSPORT_PLAN",
+    # DO ก่อน SO — DOC_DO_HDR.EXTERNORDERKEY ชี้ไปหา DOC_SO_HDR อยู่
     "DOC_DO_DETAIL", "DOC_DO_HDR",
+    "DOC_SO_DETAIL", "DOC_SO_HDR",
     "MST_USER_MODULE", "MST_USER",
     "MST_CUSTOMER", "MST_SKU",
     "MST_ROUTE_ZONE", "MST_ZONE_COVERAGE", "MST_TRANSPORTATIONZONE",
@@ -527,30 +637,81 @@ PRINT 'clearing previous demo rows';
           for key, _u, _e, _d, _r, modules in USERS
           for module in (modules or [])])
 
-    # ── DOC_DO_HDR / DOC_DO_DETAIL ──────────────────────────────────────────
-    orders_data = generated_orders(orders, rng)
+    # ── DOC_SO_HDR / _DETAIL และ DOC_DO_HDR / _DETAIL ───────────────────────
+    #
+    # SO มาก่อน DO เสมอ ทั้งลำดับการสร้างและทิศทาง FK: ใบสั่งขายคือสิ่งที่ลูกค้า
+    # สั่ง ส่วนใบสั่งส่งคือของหนึ่งเที่ยวรถที่ออกจากคลัง SO ใบเดียวออก DO ได้หลายใบ
+    #
+    # ใบที่อยู่บนใบปิดบรรทุกถูกสร้างก่อน เพื่อให้ทุกจุดส่งชี้ไปที่ DO ที่มีอยู่จริง
+    # ในตาราง แทนที่จะเป็นเลขที่แต่งขึ้นลอย ๆ — join จากใบปิดบรรทุกกลับไปหา SO
+    # จึงเดินได้ตลอดสาย
+    counter = Counter()
+    manifest_sos: list[dict[str, Any]] = []
+    manifest_dos: dict[tuple[str, str], dict[str, Any]] = {}
+
+    for key, status, whse, _r, _t, _v, _d, delivery, *_rest, customers in MANIFESTS:
+        for customer_key in customers:
+            order_day = delivery - timedelta(days=rng.randint(2, 6))
+            so = sales_order(counter, customer_row(customer_key), whse, rng,
+                             order_day, delivery)
+            # A document already on a lorry has shipped in full — a split here
+            # would leave a remainder with nowhere to be.
+            do_status = "SHIPPED" if status in ("SENT", "COMPLETED") else "PICKED"
+            dos = delivery_orders_for(so, counter, rng, 1, delivery, do_status)
+            manifest_sos.append(so)
+            manifest_dos[(key, customer_key)] = dos[0]
+
+    pool_sos, pool_dos = generated_documents(orders, rng, counter)
+    all_sos = manifest_sos + pool_sos
+    all_dos = list(manifest_dos.values()) + pool_dos
+
+    emit("DOC_SO_HDR",
+         ["WHSEID", "SOKEY", "OWNERKEY", "CUSTOMERKEY", "SHIPTO", "ORDERDATE",
+          "REQUESTEDDATE", "SOURCESYSTEM", "CURRENCY", "TOTALAMOUNT", "TOTALLINE",
+          "STATUS", "ADDDATE", "ADDWHO"],
+         [(so["whse"], so["sokey"], OWNER, so["customer"], so["shipto"],
+           so["orderdate"], so["requested"], "OMS", "THB",
+           round(sum(l["qty"] * l["price"] for l in so["lines"]), 2),
+           len(so["lines"]), so_status(so), now, "seed")
+          for so in all_sos])
+
+    emit("DOC_SO_DETAIL",
+         ["WHSEID", "SOKEY", "SOLINENUMBER", "OWNERKEY", "SKU", "UOM",
+          "ORDERQTY", "SHIPPEDQTY", "UNITPRICE", "EXTENDEDPRICE", "STATUS",
+          "ADDDATE", "ADDWHO"],
+         [(so["whse"], so["sokey"], l["line"], OWNER, l["sku"], l["uom"],
+           l["qty"], l["shipped"], l["price"], round(l["qty"] * l["price"], 2),
+           "CLOSED" if l["shipped"] >= l["qty"] else ("PARTIAL" if l["shipped"] else "NEW"),
+           now, "seed")
+          for so in all_sos for l in so["lines"]])
+
     emit("DOC_DO_HDR",
          ["WHSEID", "ORDERKEY", "OWNERKEY", "EXTERNORDERKEY", "ORDERDATE",
           "DELIVERYDATE", "PRIORITY", "SHIPTO", "C_COMPANY", "DOOR", "BATCHFLAG",
           "STATUS", "TYPE", "ORDERGROUP", "ROUTE", "ZONE", "ADDDATE", "ADDWHO"],
-         [(o["warehouse"], o["orderkey"], OWNER, o["extern"], o["orderdate"],
+         [(o["whse"], o["orderkey"], OWNER, o["sokey"], o["orderdate"],
            o["duedate"], "5", o["customer"], customer_row(o["customer"])[1],
            "D01", "N", o["status"], "SO", "GEN", o["route"], o["zone"], now, "seed")
-          for o in orders_data])
+          for o in all_dos])
 
     detail_rows = []
-    for o in orders_data:
-        for line_no, ((sku, _descr, weight, cube, uom), qty) in enumerate(o["lines"], start=1):
-            price = round(18 + (hash(sku) % 40), 2)
+    for o in all_dos:
+        for line in o["lines"]:
+            qty = line["qty"]
             detail_rows.append(with_defaults(
                 DO_DETAIL_DEFAULTS,
-                WHSEID=o["warehouse"], ORDERKEY=o["orderkey"],
-                ORDERLINENUMBER=f"{line_no:05d}", EXTERNORDERKEY=o["extern"],
-                EXTERNLINENO=str(line_no), SKU=sku, OWNERKEY=OWNER,
-                ORIGINALQTY=qty, OPENQTY=qty, UOM=uom, STATUS="NEW",
-                UNITPRICE=price, EXTENDEDPRICE=round(price * qty, 2),
-                PRODUCT_WEIGHT=round(weight * qty, 3), PRODUCT_CUBE=round(cube * qty, 4),
-                FACILITY=o["warehouse"], ADDDATE=now, ADDWHO="seed"))
+                WHSEID=o["whse"], ORDERKEY=o["orderkey"],
+                ORDERLINENUMBER=line["line"], EXTERNORDERKEY=o["sokey"],
+                # Points back at the sales-order line, not just the sales order,
+                # so a partial shipment can be traced to the line it came from.
+                EXTERNLINENO=line["line"], SKU=line["sku"], OWNERKEY=OWNER,
+                ORIGINALQTY=qty, OPENQTY=0 if o["status"] != "NEW" else qty,
+                SHIPPEDQTY=qty if o["status"] == "SHIPPED" else 0,
+                UOM=line["uom"], STATUS=o["status"],
+                UNITPRICE=line["price"], EXTENDEDPRICE=round(line["price"] * qty, 2),
+                PRODUCT_WEIGHT=round(line["weight"] * qty, 3),
+                PRODUCT_CUBE=round(line["cube"] * qty, 4),
+                FACILITY=o["whse"], ADDDATE=now, ADDWHO="seed"))
     cols, rows = rows_from_dicts(detail_rows)
     emit("DOC_DO_DETAIL", cols, rows)
 
@@ -568,10 +729,9 @@ PRINT 'clearing previous demo rows';
 
     # ── DOC_SHIPMENT_* ──────────────────────────────────────────────────────
     hdr, stops, details, lines, logs = [], [], [], [], []
-    order_seq = 700
 
-    for m_index, (key, status, whse, route, transporter, vehicle, driver,
-                  delivery, seal, dock, cost, message, customers) in enumerate(MANIFESTS):
+    for key, status, whse, route, transporter, vehicle, driver, \
+            delivery, seal, dock, cost, message, customers in MANIFESTS:
         closed = datetime.combine(delivery - timedelta(days=1), datetime.min.time()) + timedelta(hours=9)
         hdr.append((whse, key, closed, delivery, route, zone_of(customers[0]),
                     transporter, vehicle, driver, seal, dock, len(customers),
@@ -584,20 +744,24 @@ PRINT 'clearing previous demo rows';
                           c[2], c[4], c[5], c[6], c[9], c[10],
                           "DELIVERED" if status == "COMPLETED" else "NEW", now, "seed"))
 
-            order_seq += 1
+            # The delivery order raised for this stop above — a real row in
+            # DOC_DO_HDR, carrying the sales order it came from.
+            do = manifest_dos[(key, customer_key)]
             detail_id = stop_seq
-            orderkey = f"DO-2026-0{order_seq}"
-            details.append((whse, key, detail_id, stop_id, orderkey,
-                            f"SO-991{order_seq:04d}", OWNER20, route,
+            details.append((whse, key, detail_id, stop_id, do["orderkey"],
+                            do["sokey"], OWNER20, route,
                             zone_of(customer_key), delivery,
                             "DELIVERED" if status == "COMPLETED" else "NEW", now, "seed"))
 
-            for line_no, ((sku, _d, weight, cube, uom), qty) in enumerate(
-                    [(rng.choice(SKUS), rng.randint(20, 200)) for _ in range(2)], start=1):
+            # Lines are the delivery order's own, not fresh random ones: the
+            # quantity on the lorry has to be the quantity the document says.
+            for line_no, line in enumerate(do["lines"], start=1):
+                qty = line["qty"]
                 shipped = qty if status in ("SENT", "COMPLETED") else 0
                 delivered = qty if status == "COMPLETED" else 0
-                lines.append((whse, key, detail_id, line_no, orderkey, str(line_no),
-                              sku, uom, qty, qty, shipped, shipped, delivered,
+                lines.append((whse, key, detail_id, line_no, do["orderkey"],
+                              line["line"], line["sku"], line["uom"],
+                              qty, qty, shipped, shipped, delivered,
                               "DELIVERED" if status == "COMPLETED" else "NEW", now, "seed"))
 
         # Every step the document has already passed, then its current one.

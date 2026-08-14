@@ -81,6 +81,7 @@ server connection error.
 | `Dtos/` | Request bodies accepted from clients |
 | `Middleware/` | Error handling and JSON error responses |
 | `Services/` | JWT key handling and token creation |
+| `Database/` | EF Core context and the read path onto SQL Server |
 | `tests/` | Python smoke tests and data generation helpers |
 | `docs/data-model/` | SQL Server data-model notes and local DB scripts |
 
@@ -203,42 +204,61 @@ To generate a new key:
 node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
 ```
 
-## Database Roadmap
+## Database Mode
 
-The API currently uses singleton in-memory stores. The SQL Server notes and local
-database scripts live in:
+The API runs with or without SQL Server. Which one is decided by a single
+setting: a connection string named `Mmdev` in `appsettings.Development.json`.
 
-```text
-docs/data-model/
-```
+| Connection string | Master lists come from | `/sales-orders` |
+| --- | --- | --- |
+| Set | `MMDEV` on SQL Server | Available |
+| Absent | The in-memory seed, as before | `503` with a message saying why |
 
-Create a local development database:
+It is optional rather than required so the project still starts with nothing
+installed but the .NET SDK, which is what the smoke tests and the frontend
+fixtures depend on.
+
+Build the database first — see `docs/data-model/README.md` section 7:
 
 ```powershell
 cd docs\data-model
-.\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB"
+.\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB" -Seed
 ```
 
-The intended migration path is:
+Reading is wired up: `/warehouses`, `/delivery-zones`, `/routes`, `/carriers`,
+`/fleet-vehicles`, `/drivers`, and `/sales-orders` are served from the database
+via `Database/AppDbContext.cs` and `Database/MasterQueries.cs`.
 
-1. Add EF Core packages: `Microsoft.EntityFrameworkCore.SqlServer` and
-   `Microsoft.EntityFrameworkCore.Design`.
-2. Create `Database/AppDbContext.cs`.
-3. Register the DbContext in `Program.cs`.
-4. Replace in-memory `List<T>` storage in the stores with EF-backed persistence.
-5. Wrap stop movement in database transactions so the "one place only" rule
-   remains correct under concurrent requests.
-6. Run migrations with `dotnet ef migrations add Initial` and
-   `dotnet ef database update`.
+### Reads Only — And What That Costs
 
-The store methods should keep owning the business rules. Only the persistence
-mechanism should change.
+Writes still go to the in-memory stores, which own the business rules. Two
+consequences follow, and both are visible rather than subtle:
+
+- A row created by `POST /carriers` does **not** appear in `GET /carriers`. They
+  are no longer the same collection.
+- Master ids differ between the two sources. The database derives them from the
+  real keys (`cr-CR-001`), while manifests still come from the seed and name
+  `cr-1`. A manifest's `carrierId` therefore matches nothing in a database-backed
+  carrier list.
+
+Neither is a defect to be worked around; both are what a half-migrated system
+looks like. They disappear when the documents move across too.
+
+### What Is Left
+
+1. Move `TmsStore` and `DeliveryOrderStore` from `List<T>` to `DbSet<T>`.
+2. Wrap stop movement in a database transaction, so "an order is in one place
+   only" survives two requests arriving together — the rule the in-memory
+   `lock (_gate)` currently keeps.
+3. Write masters through the same path, which removes the id mismatch above.
+
+The store methods keep owning the rules. Only the storage changes.
 
 ## Not Done Yet
 
 | Item | Note |
 | --- | --- |
-| Persistent database | Still in-memory |
+| Persistent writes | Reads come from SQL Server; every write is still in-memory |
 | Real password verification | Login currently trusts email only |
 | Role-level authorization | A valid token can currently call all endpoints |
 | `/receipts` live backend | This is WMS inbound scope and still fixture-backed |

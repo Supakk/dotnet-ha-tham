@@ -519,6 +519,124 @@ ALTER TABLE [dbo].[MST_USER_MODULE] WITH CHECK ADD CONSTRAINT [FK_MST_USER_MODUL
     FOREIGN KEY([USERKEY]) REFERENCES [dbo].[MST_USER] ([USERKEY]) ON DELETE CASCADE
 GO
 
+/* -----------------------------------------------------------------------------
+   10 · DOC_SO_HDR / DOC_SO_DETAIL — ใบสั่งขาย แยกออกจากใบสั่งส่ง
+
+   ฐานเดิม **ไม่มีตาราง SO เลย** มีแต่ `DOC_DO_HDR.EXTERNORDERKEY nvarchar(55)`
+   ซึ่งเป็นข้อความลอย ๆ ที่เก็บเลข SO เอาไว้ ผลคือ:
+
+     - ตอบไม่ได้ว่า SO ใบหนึ่งสั่งอะไรมาบ้าง ใครสั่ง มูลค่าเท่าไหร่ ปิดหรือยัง
+     - ตอบไม่ได้ว่า SO ใบหนึ่งถูกแตกเป็น DO กี่ใบ และครบตามที่สั่งหรือยัง
+     - จอที่แสดงทั้ง `soNo` และ `doNo` คู่กัน (StopChecklist, PlanContentsDialog)
+       อ่าน SO จากคอลัมน์ข้อความบน DO ไม่ใช่จากใบ SO จริง
+
+   ความสัมพันธ์คือ **SO หนึ่งใบ → DO ได้หลายใบ** ไม่ใช่ 1:1 — ของสั่งครั้งเดียว
+   แต่ทยอยส่งหลายรอบเป็นเรื่องปกติ (ของไม่พอ ลูกค้าขอแบ่งส่ง หรือคนละคลัง)
+   ทิศทาง FK จึงเป็น DO ชี้ขึ้นไปหา SO ไม่ใช่ทางกลับ
+
+   ⚠ ไดอะแกรม ER เรียกตาราง `DOC_SO_HDR` แต่หมายถึงตารางที่ฐานจริงชื่อ
+     `DOC_DO_HDR` (README หัวข้อ 1) — **ตารางที่สร้างตรงนี้ไม่ใช่ตัวเดียวกับใน
+     ไดอะแกรม** เป็นชั้น SO ของจริงที่ยังไม่เคยมี ชื่อพ้องกันโดยบังเอิญ
+----------------------------------------------------------------------------- */
+CREATE TABLE [dbo].[DOC_SO_HDR](
+    [SERIALKEY]         [int] IDENTITY(1,1) NOT NULL,
+    [WHSEID]            [nvarchar](30)  NOT NULL,
+    /* ยาว 55 ให้เท่ากับ DOC_DO_HDR.EXTERNORDERKEY เป๊ะ ๆ เพราะ FK บังคับให้สอง
+       ฝั่งชนิดและความยาวตรงกัน (README หัวข้อ 2.10) — ตั้งสั้นกว่านี้แล้ว
+       ผูก DO กลับมาหา SO ไม่ได้เลย */
+    [SOKEY]             [nvarchar](55)  NOT NULL,   -- SO-9910231
+    [OWNERKEY]          [nvarchar](15)  NOT NULL,
+    [CUSTOMERKEY]       [nvarchar](30)  NULL,
+    [SHIPTO]            [nvarchar](15)  NULL,       -- เลขเดิมฝั่ง WMS เพื่อสอบย้อน
+    [ORDERDATE]         [datetime]      NOT NULL,   -- วันที่ลูกค้าสั่ง
+    [REQUESTEDDATE]     [date]          NULL,       -- วันที่ลูกค้าอยากได้ของ
+    [SOURCESYSTEM]      [nvarchar](10)  NOT NULL,   -- OMS · SAP · MANUAL
+    [SOURCEREFERENCE]   [nvarchar](55)  NULL,       -- เลขในระบบต้นทาง ถ้าไม่ใช่เลขเดียวกัน
+    [CURRENCY]          [nvarchar](3)   NULL,
+    [TOTALAMOUNT]       [decimal](22, 5) NULL,
+    [TOTALLINE]         [int]            NULL,
+    /* NEW = รับเข้ามาแล้วยังไม่ออก DO · PARTIAL = ออก DO แล้วบางส่วน
+       CLOSED = ออกครบตามจำนวนที่สั่ง · CANCELLED = ยกเลิกทั้งใบ
+       ยังไม่ใส่ CHECK เพราะค่าที่ระบบต้นทางส่งมาจริงต้องยืนยันก่อน (README หัวข้อ 5) */
+    [STATUS]            [nvarchar](10)  NOT NULL,
+    [NOTES]             [nvarchar](1000) NULL,
+    [ADDDATE]           [datetime]      NOT NULL,
+    [ADDWHO]            [nvarchar](100) NULL,
+    [EDITDATE]          [datetime]      NULL,
+    [EDITWHO]           [nvarchar](100) NULL,
+    [SUSR1]             [nvarchar](100) NULL,
+    [SUSR2]             [nvarchar](100) NULL,
+    [SUSR3]             [nvarchar](100) NULL,
+    [SUSR4]             [nvarchar](100) NULL,
+    [SUSR5]             [nvarchar](100) NULL,
+ CONSTRAINT [PK_DOC_SO_HDR] PRIMARY KEY CLUSTERED ([WHSEID] ASC, [SOKEY] ASC) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[DOC_SO_HDR] ADD CONSTRAINT [DF_DOC_SO_HDR_STATUS]   DEFAULT ('NEW')     FOR [STATUS]
+GO
+ALTER TABLE [dbo].[DOC_SO_HDR] ADD CONSTRAINT [DF_DOC_SO_HDR_SOURCE]   DEFAULT ('OMS')     FOR [SOURCESYSTEM]
+GO
+ALTER TABLE [dbo].[DOC_SO_HDR] ADD CONSTRAINT [DF_DOC_SO_HDR_ADDDATE]  DEFAULT (getdate()) FOR [ADDDATE]
+GO
+
+ALTER TABLE [dbo].[DOC_SO_HDR] WITH CHECK ADD CONSTRAINT [FK_DOC_SO_HDR_CUSTOMER]
+    FOREIGN KEY([CUSTOMERKEY]) REFERENCES [dbo].[MST_CUSTOMER] ([CUSTOMERKEY])
+GO
+
+/* เลข SO ต้องไม่ซ้ำข้ามคลังด้วย — มันมาจากระบบต้นทางระบบเดียว ถ้าซ้ำได้
+   `DOC_DO_HDR.EXTERNORDERKEY` จะชี้ไปได้สองใบและตอบไม่ได้ว่าใบไหน */
+CREATE UNIQUE INDEX [UX_DOC_SO_HDR_SOKEY] ON [dbo].[DOC_SO_HDR] ([SOKEY])
+GO
+CREATE INDEX [IX_DOC_SO_HDR_CUSTOMER_DATE]
+    ON [dbo].[DOC_SO_HDR] ([CUSTOMERKEY], [ORDERDATE] DESC)
+GO
+
+CREATE TABLE [dbo].[DOC_SO_DETAIL](
+    [SERIALKEY]       [int] IDENTITY(1,1) NOT NULL,
+    [WHSEID]          [nvarchar](30)  NOT NULL,
+    [SOKEY]           [nvarchar](55)  NOT NULL,
+    [SOLINENUMBER]    [nvarchar](5)   NOT NULL,   -- รูปแบบเดียวกับ DOC_DO_DETAIL.ORDERLINENUMBER
+    [OWNERKEY]        [nvarchar](15)  NOT NULL,
+    [SKU]             [nvarchar](50)  NOT NULL,
+    [UOM]             [nvarchar](10)  NULL,
+    /* ORDERQTY คือที่ลูกค้าสั่ง · SHIPPEDQTY คือที่ออก DO ไปแล้วรวมทุกใบ
+       ผลต่างคือของที่ยังค้างส่ง ซึ่งเป็นตัวเลขที่ทั้งระบบยังตอบไม่ได้ตอนนี้ */
+    [ORDERQTY]        [decimal](22, 5) NOT NULL,
+    [SHIPPEDQTY]      [decimal](22, 5) NOT NULL,
+    [UNITPRICE]       [decimal](22, 5) NULL,
+    [EXTENDEDPRICE]   [decimal](22, 5) NULL,
+    [STATUS]          [nvarchar](10)  NOT NULL,
+    [ADDDATE]         [datetime]      NOT NULL,
+    [ADDWHO]          [nvarchar](100) NULL,
+    [EDITDATE]        [datetime]      NULL,
+    [EDITWHO]         [nvarchar](100) NULL,
+ CONSTRAINT [PK_DOC_SO_DETAIL] PRIMARY KEY CLUSTERED
+    ([WHSEID] ASC, [SOKEY] ASC, [SOLINENUMBER] ASC) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[DOC_SO_DETAIL] ADD CONSTRAINT [DF_DOC_SO_DETAIL_SHIPPED] DEFAULT ((0))       FOR [SHIPPEDQTY]
+GO
+ALTER TABLE [dbo].[DOC_SO_DETAIL] ADD CONSTRAINT [DF_DOC_SO_DETAIL_STATUS]  DEFAULT ('NEW')     FOR [STATUS]
+GO
+ALTER TABLE [dbo].[DOC_SO_DETAIL] ADD CONSTRAINT [DF_DOC_SO_DETAIL_ADDDATE] DEFAULT (getdate()) FOR [ADDDATE]
+GO
+
+ALTER TABLE [dbo].[DOC_SO_DETAIL] WITH CHECK ADD CONSTRAINT [FK_DOC_SO_DETAIL_HDR]
+    FOREIGN KEY([WHSEID], [SOKEY]) REFERENCES [dbo].[DOC_SO_HDR] ([WHSEID], [SOKEY])
+GO
+
+/* FK ไป MST_SKU อยู่ในไฟล์ 02 ส่วน D ไม่ใช่ตรงนี้ — `MST_SKU` เป็นตารางเดิมที่
+   ยังไม่มี PK จนกว่าส่วน A ของไฟล์นั้นจะใส่ให้ ถ้าประกาศตรงนี้จะได้ Msg 1776
+   "There are no primary or candidate keys in the referenced table" */
+
+/* ส่งเกินที่สั่งไม่ได้ — ถ้าจะอนุญาตต้องเป็นการตัดสินใจที่เขียนไว้ ไม่ใช่ผลข้างเคียง
+   ของการไม่มี constraint (`MST_VENDOR.OVERRECEIPT_PERCENT` มีแนวคิดนี้ฝั่งขาเข้าอยู่แล้ว) */
+ALTER TABLE [dbo].[DOC_SO_DETAIL] WITH CHECK ADD CONSTRAINT [CK_DOC_SO_DETAIL_QTY]
+    CHECK ([ORDERQTY] >= (0) AND [SHIPPEDQTY] >= (0) AND [SHIPPEDQTY] <= [ORDERQTY])
+GO
+
 /* =============================================================================
    หมายเหตุ · ทำไมคอลัมน์ ZONE ในตารางเอกสารถึงยังผูก FK ไม่ได้
 

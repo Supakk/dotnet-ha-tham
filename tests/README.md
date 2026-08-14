@@ -94,7 +94,8 @@ cd docs\data-model
 | Fleet | `MST_TRANSPORTER` `MST_VEHICLETYPE` `MST_VEHICLE` `MST_DRIVER` | 19 |
 | Customers and SKUs | `MST_CUSTOMER` `MST_SKU` | 18 |
 | Users | `MST_USER` `MST_USER_MODULE` | 21 |
-| Delivery orders | `DOC_DO_HDR` `DOC_DO_DETAIL` | 125 at `--orders 40` |
+| Sales orders | `DOC_SO_HDR` `DOC_SO_DETAIL` | 173 at `--orders 40` |
+| Delivery orders | `DOC_DO_HDR` `DOC_DO_DETAIL` | 177 at `--orders 40` |
 | Transport plan | `DOC_TRANSPORT_PLAN` `_LINE` | 1 |
 | Manifests | `DOC_SHIPMENT_HDR` `_STOP` `_DETAIL` `_DETAIL_LINE` `_STATUS_LOG` | 59 |
 
@@ -102,9 +103,18 @@ The fixed rows mirror `Data/Seed.cs` — same warehouse codes, zones, routes,
 carriers, vehicles, drivers, and the five manifests parked one at each step of
 ติดตามสถานะ (draft, confirmed, sent, completed, error). A screen therefore shows
 the same thing whether it reads the in-memory store or the database.
-`--orders` adds generated delivery orders on top for anything that needs volume
+`--orders` adds generated sales orders on top for anything that needs volume
 rather than a known fixture; their due dates are spread either side of the
 fixture date so overdue styling has something to catch.
+
+Sales orders and delivery orders are separate documents, not two names for one.
+A sales order is what a customer asked for; a delivery order is one lorry-load
+of it leaving a warehouse, and one sales order can produce several. The
+generator raises them in that order and fills `DOC_SO_DETAIL.SHIPPEDQTY` from
+the delivery orders actually created, so the two can never disagree. Roughly a
+sixth of the pool is left with no delivery order at all and a quarter only
+half-shipped — a set where every order is complete never exercises the
+outstanding-quantity arithmetic that the sales-order layer exists to do.
 
 Re-running is safe. The script deletes the rows it owns in reverse foreign-key
 order before inserting, and wraps everything in one transaction with
