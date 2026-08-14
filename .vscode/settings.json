@@ -1,39 +1,45 @@
 {
-  // โปรไฟล์ให้ส่วนขยาย SQL Server (ms-mssql.mssql) — กด Ctrl+Shift+P แล้วเลือก
-  // "MS SQL: Connect" จะเห็นชื่อนี้ในรายการโดยไม่ต้องกรอกอะไร
+  // ── ฐานข้อมูลของโปรเจคนี้ ────────────────────────────────────────────────────
   //
-  // ⚠ ms-mssql.mssql 1.44 **อ่าน mssql.connections จาก user settings เท่านั้น**
-  //   ไฟล์ workspace นี้จะไม่ทำให้โปรไฟล์โผล่ในรายการ ถึงจะประกาศ scope=resource
-  //   ไว้ก็ตาม (ตัวเก็บ connection ของมันต้องเขียนกลับได้ จึงอ่านจาก global value)
-  //   → ต้องคัดลอกก้อนข้างล่างไปไว้ที่ %APPDATA%\Code\User\settings.json ด้วย
-  //     พร้อมเพิ่ม "groupId": "ROOT" เข้าไปในโปรไฟล์
-  //   เก็บไว้ตรงนี้เพราะเป็นเอกสารว่าโปรเจคนี้ต่อฐานไหนด้วยค่าอะไร
+  // โปรไฟล์ของส่วนขยาย SQL Server (ms-mssql.mssql) **ต้องอยู่ใน user settings**
+  // ไม่ใช่ไฟล์นี้ — และห้ามประกาศ "mssql.connections" ไว้ตรงนี้เลยแม้แต่
+  // อาร์เรย์ว่าง เพราะ setting ตัวนี้เป็น scope: resource ค่าใน workspace จะ
+  // **ทับ** ค่าใน user settings ทั้งก้อน ผลคือพอเปิดโฟลเดอร์นี้ ส่วนขยายจะเห็น
+  // รายการ connection ว่างเปล่าและโปรไฟล์หายไปทั้งที่ตั้งไว้ถูกแล้ว
   //
-  // ใช้ Integrated (Windows Authentication) จึง **ไม่มีรหัสผ่านในไฟล์นี้**
-  // และไม่ควรมี — ถ้าวันหนึ่งต้องต่อด้วย SQL login ให้ใส่แค่ user ไว้ตรงนี้
-  // แล้วปล่อยให้ส่วนขยายถามรหัสผ่านและเก็บลง credential store ของ Windows เอง
+  // ตั้งโปรไฟล์ที่: Ctrl+Shift+P → "Preferences: Open User Settings (JSON)"
+  //
+  //   "mssql.connections": [
+  //     {
+  //       "profileName": "MamMoD dev (MMDEV)",
+  //       "server": "(localdb)\\MSSQLLocalDB",
+  //       "database": "MMDEV",
+  //       "authenticationType": "Integrated",
+  //       "trustServerCertificate": true,
+  //       "connectTimeout": 30,
+  //       "groupId": "ROOT"
+  //     }
+  //   ]
+  //
+  // ไม่มี username/password เพราะใช้ Windows Authentication
   //
   // ทำไมเป็น LocalDB ไม่ใช่ .\SQLEXPRESS
   // ---------------------------------------------------------------------------
-  // ส่วนขยายนี้คุยกับฐานผ่าน SqlToolsService ซึ่งใช้ **managed SNI** ที่รองรับ
-  // แค่ TCP กับ Named Pipes ส่วน SQLEXPRESS ในเครื่องนี้เปิดไว้แต่ Shared Memory
+  // ส่วนขยายคุยกับฐานผ่าน SqlToolsService ซึ่งใช้ managed SNI ที่รองรับแค่ TCP
+  // กับ Named Pipes ส่วน SQLEXPRESS ในเครื่องนี้เปิดไว้แต่ Shared Memory
   // → ต่อแล้วได้ "TCP Provider ... The wait operation timed out"
-  // LocalDB คุยผ่าน Named Pipes อยู่แล้วจึงต่อได้ทันทีโดยไม่ต้องใช้สิทธิ์ admin
+  // LocalDB คุยผ่าน Named Pipes อยู่แล้ว จึงต่อได้โดยไม่ต้องใช้สิทธิ์ admin
+  // ถ้าจะใช้ SQLEXPRESS ต้องเปิด TCP/IP ใน SQL Server Configuration Manager
+  // (ต้องเป็น admin แล้วรีสตาร์ท service) แล้วเปลี่ยน server เป็น .\SQLEXPRESS
   //
-  // ถ้าอยากใช้ SQLEXPRESS ต้องเปิด TCP/IP ใน SQL Server Configuration Manager
-  // (ต้องเป็น admin แล้วรีสตาร์ท service) แล้วค่อยเปลี่ยน server กลับ
-  "mssql.connections": [
-    {
-      "profileName": "MamMoD dev (MMDEV)",
-      "server": "(localdb)\\MSSQLLocalDB",
-      "database": "MMDEV",
-      "authenticationType": "Integrated",
-      // ใบรับรองของ SQL Server ที่ติดตั้งในเครื่องเป็น self-signed ตามปกติ
-      // ยอมรับได้เพราะต่อในเครื่องตัวเอง — บนเซิร์ฟเวอร์จริงห้ามตั้ง true
-      "trustServerCertificate": true,
-      // LocalDB ปิดตัวเองเมื่อไม่มีใครใช้ ~15 นาที แล้วสตาร์ทใหม่ตอนมีคนต่อ
-      // ครั้งแรกหลังพักจึงช้ากว่าปกติ ให้เวลามันหน่อย
-      "connectTimeout": 30
-    }
-  ]
+  // รายละเอียดทั้งหมด: docs/data-model/README.md หัวข้อ 7
+
+  // ให้ไฟล์ .sql ในโปรเจคเปิดมาพร้อมโหมด SQL ของส่วนขยาย
+  "[sql]": {
+    "editor.defaultFormatter": "ms-mssql.mssql",
+    "editor.tabSize": 4
+  },
+  "files.associations": {
+    "*.mmd": "markdown"
+  }
 }
