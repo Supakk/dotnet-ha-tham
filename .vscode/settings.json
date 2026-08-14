@@ -2,6 +2,13 @@
   // โปรไฟล์ให้ส่วนขยาย SQL Server (ms-mssql.mssql) — กด Ctrl+Shift+P แล้วเลือก
   // "MS SQL: Connect" จะเห็นชื่อนี้ในรายการโดยไม่ต้องกรอกอะไร
   //
+  // ⚠ ms-mssql.mssql 1.44 **อ่าน mssql.connections จาก user settings เท่านั้น**
+  //   ไฟล์ workspace นี้จะไม่ทำให้โปรไฟล์โผล่ในรายการ ถึงจะประกาศ scope=resource
+  //   ไว้ก็ตาม (ตัวเก็บ connection ของมันต้องเขียนกลับได้ จึงอ่านจาก global value)
+  //   → ต้องคัดลอกก้อนข้างล่างไปไว้ที่ %APPDATA%\Code\User\settings.json ด้วย
+  //     พร้อมเพิ่ม "groupId": "ROOT" เข้าไปในโปรไฟล์
+  //   เก็บไว้ตรงนี้เพราะเป็นเอกสารว่าโปรเจคนี้ต่อฐานไหนด้วยค่าอะไร
+  //
   // ใช้ Integrated (Windows Authentication) จึง **ไม่มีรหัสผ่านในไฟล์นี้**
   // และไม่ควรมี — ถ้าวันหนึ่งต้องต่อด้วย SQL login ให้ใส่แค่ user ไว้ตรงนี้
   // แล้วปล่อยให้ส่วนขยายถามรหัสผ่านและเก็บลง credential store ของ Windows เอง

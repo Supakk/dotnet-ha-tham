@@ -389,8 +389,33 @@ tables without a primary key: none
 
 | จากไหน | ตั้งไว้ที่ | วิธี |
 | --- | --- | --- |
-| VS Code | [`.vscode/settings.json`](../../.vscode/settings.json) | `Ctrl+Shift+P` → `MS SQL: Connect` → เลือก `MamMoD dev (MMDEV)` |
+| VS Code | user settings (ดูกล่องข้างล่าง) | `Ctrl+Shift+P` → `MS SQL: Connect` → เลือก `MamMoD dev (MMDEV)` |
 | backend | [`appsettings.Development.json`](../../appsettings.Development.json) | connection string ชื่อ `Mmdev` |
+
+> **โปรไฟล์ของส่วนขยายต้องอยู่ใน user settings ไม่ใช่ `.vscode/settings.json`**
+> ms-mssql.mssql 1.44 ประกาศ `mssql.connections` ไว้เป็น `scope: resource`
+> ก็จริง แต่ตัวเก็บ connection ของมันต้องเขียนกลับได้ จึงอ่านจาก global value
+> อย่างเดียว — ใส่ไว้ใน workspace แล้วโปรไฟล์จะ **ไม่โผล่ในรายการ**
+>
+> เปิด `Ctrl+Shift+P` → `Preferences: Open User Settings (JSON)` แล้ววาง:
+>
+> ```json
+> "mssql.connections": [
+>   {
+>     "profileName": "MamMoD dev (MMDEV)",
+>     "server": "(localdb)\\MSSQLLocalDB",
+>     "database": "MMDEV",
+>     "authenticationType": "Integrated",
+>     "trustServerCertificate": true,
+>     "connectTimeout": 30,
+>     "groupId": "ROOT"
+>   }
+> ]
+> ```
+>
+> `groupId: "ROOT"` ต้องมี ไม่งั้นโปรไฟล์ไม่มีที่อยู่ใน Object Explorer ·
+> สำเนาใน [`.vscode/settings.json`](../../.vscode/settings.json) เก็บไว้เป็น
+> เอกสารว่าโปรเจคนี้ต่อฐานไหนด้วยค่าอะไร ไม่ได้ทำงานเอง
 
 ตอนขึ้น production ให้ตั้ง connection string ผ่าน environment variable
 `ConnectionStrings__Mmdev` แทน — **อย่าใส่ user/password ลงไฟล์ที่ commit**
