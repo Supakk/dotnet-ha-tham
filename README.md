@@ -1,5 +1,5 @@
-# Mammod TMS — Backend
-เขียนด้วย ASP.NET Core (net8.0) ตาม stack 
+# Project TMS — Backend for Test
+waiting for ASP.NET Core (net8.0) follow stack 
 
 ตอนนี้ข้อมูลเก็บ **ในหน่วยความจำ** ยังไม่มีฐานข้อมูล — รีสตาร์ทแล้วข้อมูลกลับไปเป็นค่าตั้งต้น
 กติกาทางธุรกิจทั้งหมดของจริงอยู่ครบแล้ว ที่ขาดคือที่เก็บถาวร
@@ -148,13 +148,15 @@ keyless entity ที่เขียนกลับไม่ได้ ต้อ�
 
 ```powershell
 cd docs\data-model
-.\build-local-db.ps1
+.\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB"
 ```
 
 ได้ฐาน `MMDEV` ที่มี 59 ตาราง PK ครบทุกใบ ต่อได้ทั้งจาก VS Code (โปรไฟล์
 `MamMoD dev (MMDEV)` ตั้งไว้ใน `.vscode/settings.json` แล้ว) และจาก backend
 ผ่าน connection string ชื่อ `Mmdev` ใน `appsettings.Development.json`
-รายละเอียดกับสิ่งที่ต้องมีก่อน อยู่ใน [หัวข้อ 7 ของ data-model README](docs/data-model/README.md)
+ทั้งคู่ใช้ Windows Authentication จึงไม่ต้องมี username/password
+รายละเอียด — รวมถึงเหตุผลที่ใช้ LocalDB แทน `.\SQLEXPRESS` — อยู่ใน
+[หัวข้อ 7 ของ data-model README](docs/data-model/README.md)
 
 ทำตามลำดับนี้ (ลอกรูปแบบจาก `KM_BE_Dev/OMS_KMTo/Database` ได้)
 

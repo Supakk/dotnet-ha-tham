@@ -5,16 +5,28 @@
   // ใช้ Integrated (Windows Authentication) จึง **ไม่มีรหัสผ่านในไฟล์นี้**
   // และไม่ควรมี — ถ้าวันหนึ่งต้องต่อด้วย SQL login ให้ใส่แค่ user ไว้ตรงนี้
   // แล้วปล่อยให้ส่วนขยายถามรหัสผ่านและเก็บลง credential store ของ Windows เอง
+  //
+  // ทำไมเป็น LocalDB ไม่ใช่ .\SQLEXPRESS
+  // ---------------------------------------------------------------------------
+  // ส่วนขยายนี้คุยกับฐานผ่าน SqlToolsService ซึ่งใช้ **managed SNI** ที่รองรับ
+  // แค่ TCP กับ Named Pipes ส่วน SQLEXPRESS ในเครื่องนี้เปิดไว้แต่ Shared Memory
+  // → ต่อแล้วได้ "TCP Provider ... The wait operation timed out"
+  // LocalDB คุยผ่าน Named Pipes อยู่แล้วจึงต่อได้ทันทีโดยไม่ต้องใช้สิทธิ์ admin
+  //
+  // ถ้าอยากใช้ SQLEXPRESS ต้องเปิด TCP/IP ใน SQL Server Configuration Manager
+  // (ต้องเป็น admin แล้วรีสตาร์ท service) แล้วค่อยเปลี่ยน server กลับ
   "mssql.connections": [
     {
       "profileName": "MamMoD dev (MMDEV)",
-      "server": ".\\SQLEXPRESS",
+      "server": "(localdb)\\MSSQLLocalDB",
       "database": "MMDEV",
       "authenticationType": "Integrated",
       // ใบรับรองของ SQL Server ที่ติดตั้งในเครื่องเป็น self-signed ตามปกติ
       // ยอมรับได้เพราะต่อในเครื่องตัวเอง — บนเซิร์ฟเวอร์จริงห้ามตั้ง true
       "trustServerCertificate": true,
-      "connectTimeout": 15
+      // LocalDB ปิดตัวเองเมื่อไม่มีใครใช้ ~15 นาที แล้วสตาร์ทใหม่ตอนมีคนต่อ
+      // ครั้งแรกหลังพักจึงช้ากว่าปกติ ให้เวลามันหน่อย
+      "connectTimeout": 30
     }
   ]
 }

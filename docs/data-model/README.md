@@ -366,7 +366,7 @@ production ของลูกค้า — ขอจากทีมที่ด�
 
 ```powershell
 cd docs\data-model
-.\build-local-db.ps1
+.\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB"
 # หรือชี้ไฟล์เอง / เปลี่ยนปลายทาง
 .\build-local-db.ps1 -Server ".\SQLEXPRESS" -Database MMDEV -SchemaFile "$HOME\Downloads\MAMMOD_TABLE2_R03.sql"
 ```
@@ -378,26 +378,44 @@ cd docs\data-model
 tables       59
 primary keys 59
 foreign keys 41
-indexes      209
+indexes      15
 tables without a primary key: none
 ```
 
-**ต่อจาก VS Code** — ส่วนขยาย `ms-mssql.mssql` และโปรไฟล์ `MamMoD dev (MMDEV)`
-ตั้งไว้ให้แล้วใน [`.vscode/settings.json`](../../.vscode/settings.json)
-กด `Ctrl+Shift+P` → `MS SQL: Connect` → เลือกโปรไฟล์ ไม่ต้องกรอกอะไร
-ใช้ Windows Authentication จึงไม่มีรหัสผ่านที่ไหนเลย
+### ต่อกับฐาน
 
-**ต่อจาก backend** — connection string อยู่ใน
-[`appsettings.Development.json`](../../appsettings.Development.json) ชื่อ `Mmdev`
-เป็น `Trusted_Connection` เหมือนกัน ไม่มีความลับ จึง commit ได้
-ตอนขึ้น production ให้ตั้งผ่าน environment variable `ConnectionStrings__Mmdev`
-แทน **อย่าใส่ user/password ลงไฟล์ที่ commit**
+**ไม่มี username/password** ทั้งสองทาง — ใช้ Windows Authentication
+สิทธิ์มาจาก account ที่ล็อกอิน Windows อยู่
 
-> TCP/IP ของ SQL Server Express ในเครื่องนี้ปิดอยู่ ซึ่ง**ไม่เป็นไร** — ทั้ง
-> VS Code และ .NET ต่อผ่าน shared memory ได้เพราะอยู่เครื่องเดียวกัน
-> (ยืนยันแล้ว: `net_transport = Shared memory`) จะต้องเปิด TCP ก็ต่อเมื่อมี
-> เครื่องอื่นต้องต่อเข้ามา ซึ่งต้องใช้สิทธิ์ admin เปิดใน SQL Server
-> Configuration Manager แล้วรีสตาร์ท service
+| จากไหน | ตั้งไว้ที่ | วิธี |
+| --- | --- | --- |
+| VS Code | [`.vscode/settings.json`](../../.vscode/settings.json) | `Ctrl+Shift+P` → `MS SQL: Connect` → เลือก `MamMoD dev (MMDEV)` |
+| backend | [`appsettings.Development.json`](../../appsettings.Development.json) | connection string ชื่อ `Mmdev` |
+
+ตอนขึ้น production ให้ตั้ง connection string ผ่าน environment variable
+`ConnectionStrings__Mmdev` แทน — **อย่าใส่ user/password ลงไฟล์ที่ commit**
+
+### ทำไมใช้ LocalDB ไม่ใช่ `.\SQLEXPRESS`
+
+SQL Server Express ในเครื่องนี้เปิดไว้แค่ **Shared Memory** ส่วน TCP/IP กับ
+Named Pipes ปิดทั้งคู่ ซึ่งพอเป็นแบบนั้นแล้ว **สองฝั่งเห็นไม่เหมือนกัน**:
+
+| ต่อจาก | `.\SQLEXPRESS` | `(localdb)\MSSQLLocalDB` |
+| --- | --- | --- |
+| backend .NET (native SNI) | ✅ shared memory | ✅ named pipe |
+| ส่วนขยาย VS Code (managed SNI ของ SqlToolsService) | ❌ `TCP Provider … wait operation timed out` | ✅ named pipe |
+
+managed SNI ที่ SqlToolsService ใช้ **ไม่มี shared memory provider** จึงตกไปที่
+TCP ซึ่งปิดอยู่ → timeout · LocalDB คุยผ่าน Named Pipes อยู่แล้ว ทั้งสองฝั่ง
+จึงต่อได้เหมือนกันโดยไม่ต้องแก้อะไรในระดับเครื่องและไม่ต้องใช้สิทธิ์ admin
+
+อยากใช้ SQLEXPRESS ก็ได้ ต้องเปิด TCP/IP เอง (ต้องเป็น admin): เปิด **SQL Server
+Configuration Manager** → `SQL Server Network Configuration` → `Protocols for
+SQLEXPRESS` → `TCP/IP` → Enable → แล้ว `Restart-Service 'MSSQL$SQLEXPRESS'`
+จากนั้นเปลี่ยน `server` ในสองไฟล์ข้างบนกลับเป็น `.\SQLEXPRESS`
+
+> LocalDB ปิดตัวเองเมื่อไม่มีใครใช้ราว 15 นาที แล้วสตาร์ทกลับมาเองตอนมีคนต่อ
+> การต่อครั้งแรกหลังพักจึงช้ากว่าปกติ — `connectTimeout` ตั้งไว้ 30 วินาทีเผื่อไว้แล้ว
 
 ---
 

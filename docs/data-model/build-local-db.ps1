@@ -102,7 +102,11 @@ SET NOCOUNT ON;
 SELECT 'tables       ' + CAST(COUNT(*) AS varchar) FROM sys.tables;
 SELECT 'primary keys ' + CAST(COUNT(*) AS varchar) FROM sys.key_constraints WHERE type = 'PK';
 SELECT 'foreign keys ' + CAST(COUNT(*) AS varchar) FROM sys.foreign_keys;
-SELECT 'indexes      ' + CAST(COUNT(*) AS varchar) FROM sys.indexes WHERE is_primary_key = 0 AND type > 0;
+-- ต้อง join sys.tables ไม่งั้นนับ index ของ system table ติดมาด้วย ซึ่งมีไม่เท่ากัน
+-- ในแต่ละรุ่นของ SQL Server แล้วตัวเลขจะเปลี่ยนไปเรื่อยโดยที่ฐานเราไม่ได้ต่างอะไร
+SELECT 'indexes      ' + CAST(COUNT(*) AS varchar)
+FROM   sys.indexes i JOIN sys.tables t ON t.object_id = i.object_id
+WHERE  i.is_primary_key = 0 AND i.type > 0;
 SELECT 'tables without a primary key: ' + ISNULL(STRING_AGG(name, ', '), 'none')
 FROM   sys.tables t
 WHERE  NOT EXISTS (SELECT 1 FROM sys.key_constraints k
