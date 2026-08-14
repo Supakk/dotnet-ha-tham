@@ -162,6 +162,44 @@ public sealed class MasterQueries(
             .ToList());
     }
 
+    /// <summary>
+    /// The three vehicle classes the client knows, by the database's type key.
+    ///
+    /// This is a closed set on the client side, not free text: it picks a truck
+    /// drawing with <c>IMAGES[type]</c> and reads a label from
+    /// <c>VEHICLE_LABEL[type]</c>. Hand it anything else — the Thai name held in
+    /// <c>VEHICLETYPENAME</c>, or a type key nobody has mapped — and both lookups
+    /// return undefined, so the truck silently disappears from the screen with no
+    /// error anywhere. Passing the database's own wording straight through is
+    /// exactly the bug that caused.
+    /// </summary>
+    private static readonly Dictionary<string, string> VehicleClasses = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["4W"] = "4-wheel",
+        ["6W"] = "6-wheel",
+        ["10W"] = "10-wheel",
+    };
+
+    /// <summary>
+    /// Falls back to capacity when the type key is not one of the three above,
+    /// because a real database will have keys this list has never seen and the
+    /// screen still has to draw something. Weight is the honest discriminator —
+    /// it is what actually separates the classes — and the thresholds sit at the
+    /// midpoints between 3,500 / 8,000 / 15,000 kg.
+    /// </summary>
+    private static string VehicleClass(VehicleTypeRow? type, string typeKey)
+    {
+        if (VehicleClasses.TryGetValue(typeKey, out var known)) return known;
+
+        var weight = type?.MaxWeight ?? 0;
+        return weight switch
+        {
+            <= 5_000 => "4-wheel",
+            <= 11_000 => "6-wheel",
+            _ => "10-wheel",
+        };
+    }
+
     public List<FleetVehicle> Vehicles()
     {
         if (!useDatabase) return store.ListVehicles();
@@ -178,7 +216,7 @@ public sealed class MasterQueries(
                     return new FleetVehicle
                     {
                         Id = $"v-{v.VehicleKey}",
-                        Type = type?.Name ?? v.VehicleTypeKey,
+                        Type = VehicleClass(type, v.VehicleTypeKey),
                         PlateHead = v.LicensePlate,
                         // "-" rather than empty: a rigid truck has no trailer,
                         // and the client prints this field as it stands.
@@ -195,6 +233,17 @@ public sealed class MasterQueries(
         });
     }
 
+    /// <summary>
+    /// Licence classes the client offers in its dropdown. Same closed-set problem
+    /// as the vehicle classes: a value outside this list leaves the select with
+    /// nothing highlighted, so anyone opening the driver form sees a blank where
+    /// the licence should be and can save the blank back.
+    /// </summary>
+    private static readonly HashSet<string> LicenceClasses = ["ท.1", "ท.2", "ท.3", "ท.4"];
+
+    private static string LicenceClass(string? value) =>
+        value is not null && LicenceClasses.Contains(value.Trim()) ? value.Trim() : "ท.2";
+
     public List<Driver> Drivers()
     {
         if (!useDatabase) return store.ListDrivers();
@@ -209,7 +258,7 @@ public sealed class MasterQueries(
                 Name = d.Name,
                 Phone = d.Mobile ?? "",
                 LicenseNo = d.LicenseNo ?? "",
-                LicenseType = d.LicenseType ?? "ท.2",
+                LicenseType = LicenceClass(d.LicenseType),
                 CarrierId = $"cr-{d.TransporterKey}",
                 Active = IsActive(d.Status),
             })
