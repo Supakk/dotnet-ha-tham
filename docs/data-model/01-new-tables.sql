@@ -2,8 +2,12 @@
    MamMoD (MMPRD) — ตารางที่ยังไม่มีในฐานจริง
    SQL Server · รันไฟล์นี้ก่อน 02-alter-existing.sql
 
-   ปรับใหม่ทั้งไฟล์ให้ตรงกับ MAMMOD_TABLE2_R02.sql แล้ว ไม่ใช่ตามไดอะแกรม ER
+   ตรงกับ MAMMOD_TABLE2_R03.sql (ฐาน MMDEV) แล้ว ไม่ใช่ตามไดอะแกรม ER
    ซึ่งคลาดเคลื่อนจากฐานหลายจุด (ดู README.md หัวข้อ 1)
+
+   R03 เพิ่ม MST_TRANSPORTATIONZONE กับ TRX_TODODETAIL มาจาก R02 → หัวข้อ 2
+   ในไฟล์นี้ถูกถอนออก และหัวข้อ 3, 4, 7 เปลี่ยนไปผูกกับตารางที่มีอยู่แทน
+   เหลือตารางที่สร้างจริง 10 ใบ
 
    ข้อตกลงที่ลอกมาจากตารางเดิม ไม่ได้คิดขึ้นใหม่
    - ทุกตารางมี  [SERIALKEY] int IDENTITY(1,1)  เป็นคีย์แทน
@@ -62,41 +66,30 @@ ALTER TABLE [dbo].[MST_ROUTE] ADD CONSTRAINT [DF_MST_ROUTE_ADDDATE] DEFAULT (get
 GO
 
 /* -----------------------------------------------------------------------------
-   2 · MST_DELIVERY_ZONE — พื้นที่จัดส่งของ TMS
-   คนละเรื่องกับ MST_ZONE ที่มีอยู่ ซึ่งเป็นโซนใน *คลัง* (PK = WHSEID +
-   PUTAWAYZONE, ผูก AREACODE, มี PUTAWAYSEQ/PICKSEQ) ชื่อ ZONE ในตารางขนส่ง
-   หมายถึงพื้นที่ส่งของ ไม่เกี่ยวกับ aisle/bay เลย
------------------------------------------------------------------------------ */
-CREATE TABLE [dbo].[MST_DELIVERY_ZONE](
-    [SERIALKEY]         [int] IDENTITY(1,1) NOT NULL,
-    [ZONE]              [nvarchar](20)  NOT NULL,  -- ตรงกับคอลัมน์ ZONE ที่ตารางอื่นอ้าง
-    [ZONENAME]          [nvarchar](200) NOT NULL,
-    [DESCRIPTION]       [nvarchar](250) NULL,
-    /* น้ำหนักรถสูงสุดที่เข้าพื้นที่ได้ — สะพานรับน้ำหนัก ซอยแคบ เขตห้ามรถบรรทุก
-       เป็นข้อจำกัดของ *พื้นที่* ต่อ *รถ* ไม่ใช่ความจุของโซน ให้ใช้ตอนเลือกรถ
-       ต้องยืนยันความหมายก่อนใช้งานจริง (README หัวข้อ 5) */
-    [MAX_VEHICLE_WEIGHT] [decimal](22, 5) NULL,
-    [WEIGHT_UOM]        [nvarchar](10)  NULL,
-    [SERVICE_MINUTE]    [int]           NULL,     -- เวลาให้บริการมาตรฐานต่อจุดในโซนนี้
-    [STATUS]            [nvarchar](10)  NOT NULL,
-    [NOTES]             [nvarchar](500) NULL,
-    [ADDDATE]           [datetime]      NOT NULL,
-    [ADDWHO]            [nvarchar](100) NULL,
-    [EDITDATE]          [datetime]      NULL,
-    [EDITWHO]           [nvarchar](100) NULL,
-    [SUSR1]             [nvarchar](100) NULL,
-    [SUSR2]             [nvarchar](100) NULL,
-    [SUSR3]             [nvarchar](100) NULL,
-    [SUSR4]             [nvarchar](100) NULL,
-    [SUSR5]             [nvarchar](100) NULL,
- CONSTRAINT [PK_MST_DELIVERY_ZONE] PRIMARY KEY CLUSTERED ([ZONE] ASC) ON [PRIMARY]
-) ON [PRIMARY]
-GO
+   2 · ~~MST_DELIVERY_ZONE~~ — ไม่ต้องสร้าง ฐานมีแล้วตั้งแต่ R03
 
-ALTER TABLE [dbo].[MST_DELIVERY_ZONE] ADD CONSTRAINT [DF_MST_DELIVERY_ZONE_STATUS]  DEFAULT ('ACTIVE') FOR [STATUS]
-GO
-ALTER TABLE [dbo].[MST_DELIVERY_ZONE] ADD CONSTRAINT [DF_MST_DELIVERY_ZONE_ADDDATE] DEFAULT (getdate()) FOR [ADDDATE]
-GO
+   R02 ไม่มีตารางโซนจัดส่ง จึงเคยเสนอ `MST_DELIVERY_ZONE` ไว้ตรงนี้
+   **R03 เพิ่ม `MST_TRANSPORTATIONZONE` มาแล้ว** และทำหน้าที่เดียวกัน:
+
+       PK (WHSEID, OWNERKEY, TRANSPORTZONEKEY)
+       TRANSPORTZONENAME · DESCRIPTION · COUNTRY · REGION
+       PROVINCE · DISTRICT · POSTALCODE_FROM · POSTALCODE_TO
+       DELIVERYLEADDAY · DEFAULTROUTE · PRIORITY · STATUS
+
+   และ `MST_SHIPTO` ก็ได้คอลัมน์ `TRANSPORTZONEKEY` มาชี้กลับหาแล้ว → ปัญหา
+   "จัดโซนให้ใบสั่งส่งไม่ได้" ที่ README หัวข้อ 2.4 บอกไว้ ถูกแก้ไปครึ่งหนึ่ง
+   สร้างตารางซ้ำอีกใบมีแต่จะได้โซนสองชุดที่ไม่ตรงกัน จึงตัดออก
+
+   ที่ยังขาด: ตารางนี้เก็บ **หนึ่งโซนต่อหนึ่งกฎพื้นที่** (PROVINCE/DISTRICT
+   หรือช่วง POSTALCODE ชุดเดียว) เพราะ PK ไม่มีคอลัมน์พื้นที่อยู่ด้วย
+   โซนที่กินหลายจังหวัดหรือหลายช่วงไปรษณีย์จึงเขียนลงไปไม่ได้ →
+   `MST_ZONE_COVERAGE` ในหัวข้อ 3 มาเติมส่วนนั้น
+
+   สองอย่างที่เสนอไว้แต่ `MST_TRANSPORTATIONZONE` ไม่มี และ **ยังไม่เติมให้**
+   เพราะยังไม่มีจอไหนใช้: `MAX_VEHICLE_WEIGHT` (น้ำหนักรถสูงสุดที่เข้าพื้นที่ได้
+   — สะพาน ซอยแคบ เขตห้ามรถบรรทุก) กับ `SERVICE_MINUTE` ต่อโซน
+   ถ้าจะใช้จริง ให้เพิ่มเป็น ALTER ในไฟล์ 02 ส่วน C ไม่ใช่สร้างตารางใหม่
+----------------------------------------------------------------------------- */
 
 /* -----------------------------------------------------------------------------
    3 · MST_ZONE_COVERAGE — พื้นที่ที่โซนหนึ่งครอบคลุม
@@ -104,10 +97,25 @@ GO
    MST_SHIPTO เก็บที่อยู่แบบตะวันตก (city/state/zip) ส่วน DOC_SHIPMENT_STOP
    เก็บแบบไทย (SUBDISTRICT/DISTRICT/PROVINCE/POSTALCODE) — POSTALCODE คือ
    ตัวที่แมปได้แน่นอนที่สุด จึงเป็นคอลัมน์ที่ควรใช้เป็นกุญแจหลัก
+
+   ลูกของ MST_TRANSPORTATIONZONE ที่มีอยู่แล้ว ไม่ใช่ตารางโซนใบใหม่ — ตัวแม่
+   ถือได้กฎเดียว ตารางนี้ถือได้หลายกฎต่อโซน
+
+   ⚠ สองที่ที่บอกพื้นที่ของโซนได้ ต้องเลือกให้ชัดว่าอ่านจากที่ไหน
+     `MST_TRANSPORTATIONZONE.PROVINCE/DISTRICT/POSTALCODE_FROM/TO` มีข้อมูลอยู่
+     แล้วในฐานจริง ถ้ารับตารางนี้เข้ามา ให้ถือว่าคอลัมน์บนตัวแม่เป็น *ค่าที่แสดง
+     บนหน้าจอ master* ส่วนการ **ค้นว่าที่อยู่นี้อยู่โซนไหน ให้อ่านจากตารางนี้
+     ที่เดียว** แล้ว migrate ค่าบนตัวแม่ลงมาเป็นแถวแรกของแต่ละโซน
+     (ดูสคริปต์ท้ายหัวข้อนี้) — ต้องยืนยันกับทีมที่ดูแลฐานก่อน
 ----------------------------------------------------------------------------- */
 CREATE TABLE [dbo].[MST_ZONE_COVERAGE](
     [SERIALKEY]    [int] IDENTITY(1,1) NOT NULL,
-    [ZONE]         [nvarchar](20)  NOT NULL,
+    /* สามคอลัมน์นี้คือ PK ของ MST_TRANSPORTATIONZONE ต้องมีครบถึงจะผูก FK ได้
+       OWNERKEY เป็น nvarchar(20) ตามตัวแม่ ไม่ใช่ 15 อย่างที่อีก 16 ตารางใช้ —
+       ความไม่ตรงกันนี้เป็นของฐานเดิม ดู README หัวข้อ 2.10 */
+    [WHSEID]           [nvarchar](30)  NOT NULL,
+    [OWNERKEY]         [nvarchar](20)  NOT NULL,
+    [TRANSPORTZONEKEY] [nvarchar](20)  NOT NULL,
     [PROVINCE]     [nvarchar](100) NOT NULL,
     [DISTRICT]     [nvarchar](100) NULL,
     [SUBDISTRICT]  [nvarchar](100) NULL,
@@ -127,42 +135,63 @@ ALTER TABLE [dbo].[MST_ZONE_COVERAGE] ADD CONSTRAINT [DF_MST_ZONE_COVERAGE_ADDDA
 GO
 
 ALTER TABLE [dbo].[MST_ZONE_COVERAGE] WITH CHECK ADD CONSTRAINT [FK_MST_ZONE_COVERAGE_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
+    FOREIGN KEY([WHSEID], [OWNERKEY], [TRANSPORTZONEKEY])
+    REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([WHSEID], [OWNERKEY], [TRANSPORTZONEKEY])
 GO
 
 /* ที่อยู่หนึ่งต้องตกอยู่ในโซนเดียว ไม่ใช่สองโซน — ไม่งั้นการจัดโซนอัตโนมัติ
-   ต้องเดา ดัชนีนี้กันไว้ตั้งแต่ระดับฐาน */
+   ต้องเดา ดัชนีนี้กันไว้ตั้งแต่ระดับฐาน
+   ขอบเขตความไม่ซ้ำคือ *ต่อคลัง* เพราะคนละคลังแบ่งโซนคนละแบบได้
+   NULL ใน SQL Server ถือว่าเท่ากันในดัชนี unique → กฎแบบครอบทั้งจังหวัด
+   (DISTRICT/SUBDISTRICT/POSTALCODE เป็น NULL) มีได้จังหวัดละแถวเดียว ซึ่งถูกต้อง */
 CREATE UNIQUE INDEX [UX_MST_ZONE_COVERAGE_AREA]
-    ON [dbo].[MST_ZONE_COVERAGE] ([PROVINCE], [DISTRICT], [SUBDISTRICT], [POSTALCODE])
+    ON [dbo].[MST_ZONE_COVERAGE] ([WHSEID], [PROVINCE], [DISTRICT], [SUBDISTRICT], [POSTALCODE])
 GO
 CREATE INDEX [IX_MST_ZONE_COVERAGE_POSTALCODE]
-    ON [dbo].[MST_ZONE_COVERAGE] ([POSTALCODE]) INCLUDE ([ZONE])
+    ON [dbo].[MST_ZONE_COVERAGE] ([POSTALCODE]) INCLUDE ([TRANSPORTZONEKEY])
 GO
+
+/* ย้ายกฎที่อยู่บนตัวแม่ลงมาเป็นแถวแรกของแต่ละโซน — รันครั้งเดียวหลังรับตารางนี้
+   เฉพาะโซนที่ระบุจังหวัดไว้ ส่วนโซนที่ใช้แต่ช่วงไปรษณีย์ต้องกางเป็นรายรหัสเอง
+   ซึ่งกางอัตโนมัติไม่ได้ (ช่วง 10110-10240 ไม่ได้แปลว่าทุกเลขในช่วงมีจริง)
+   ตรวจผลก่อน commit */
+-- INSERT INTO dbo.MST_ZONE_COVERAGE
+--       (WHSEID, OWNERKEY, TRANSPORTZONEKEY, PROVINCE, DISTRICT, POSTALCODE, STATUS, ADDWHO)
+-- SELECT z.WHSEID, z.OWNERKEY, z.TRANSPORTZONEKEY, z.PROVINCE, z.DISTRICT,
+--        CASE WHEN z.POSTALCODE_FROM = z.POSTALCODE_TO THEN z.POSTALCODE_FROM END,
+--        'ACTIVE', SUSER_SNAME()
+-- FROM   dbo.MST_TRANSPORTATIONZONE z
+-- WHERE  z.PROVINCE IS NOT NULL;
 
 /* -----------------------------------------------------------------------------
    4 · MST_ROUTE_ZONE — สายส่ง ↔ โซน พร้อมลำดับการวิ่ง
    MST_TRANSPORTER_ROUTE ที่มีอยู่ตอบว่า "ผู้ให้บริการรายไหนวิ่งสายไหน"
    แต่ไม่มีที่ไหนตอบว่า "สายส่งหนึ่งครอบคลุมโซนอะไร ลำดับไหน"
    (และ PK ของตารางนั้นเป็น TRANSPORTERKEY+ROUTE ทำให้แตกเป็นรายโซนไม่ได้)
+
+   ไม่มีคอลัมน์ "สายหลักของโซน" ในตารางนี้ เพราะ
+   `MST_TRANSPORTATIONZONE.DEFAULTROUTE` ถืออยู่แล้วตั้งแต่ R03 — ตารางนี้ตอบ
+   แค่ว่า *สายไหนผ่านโซนไหน ลำดับที่เท่าไหร่* ให้มีคำตอบเดียวต่อคำถามเดียว
 ----------------------------------------------------------------------------- */
 CREATE TABLE [dbo].[MST_ROUTE_ZONE](
     [SERIALKEY]    [int] IDENTITY(1,1) NOT NULL,
     [ROUTE]        [nvarchar](20) NOT NULL,
-    [ZONE]         [nvarchar](20) NOT NULL,
+    /* สามคอลัมน์ตาม PK ของ MST_TRANSPORTATIONZONE เหมือนใน MST_ZONE_COVERAGE */
+    [WHSEID]           [nvarchar](30) NOT NULL,
+    [OWNERKEY]         [nvarchar](20) NOT NULL,
+    [TRANSPORTZONEKEY] [nvarchar](20) NOT NULL,
     [SEQUENCE]     [int]          NOT NULL,
-    [DEFAULT_FLAG] [bit]          NOT NULL,
     [STATUS]       [nvarchar](10) NOT NULL,
     [ADDDATE]      [datetime]      NOT NULL,
     [ADDWHO]       [nvarchar](100) NULL,
     [EDITDATE]     [datetime]      NULL,
     [EDITWHO]      [nvarchar](100) NULL,
- CONSTRAINT [PK_MST_ROUTE_ZONE] PRIMARY KEY CLUSTERED ([ROUTE] ASC, [ZONE] ASC) ON [PRIMARY]
+ CONSTRAINT [PK_MST_ROUTE_ZONE] PRIMARY KEY CLUSTERED
+    ([ROUTE] ASC, [WHSEID] ASC, [OWNERKEY] ASC, [TRANSPORTZONEKEY] ASC) ON [PRIMARY]
 ) ON [PRIMARY]
 GO
 
 ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_SEQ]     DEFAULT ((1))      FOR [SEQUENCE]
-GO
-ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_DEFAULT] DEFAULT ((0))      FOR [DEFAULT_FLAG]
 GO
 ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_STATUS]  DEFAULT ('ACTIVE') FOR [STATUS]
 GO
@@ -173,12 +202,13 @@ ALTER TABLE [dbo].[MST_ROUTE_ZONE] WITH CHECK ADD CONSTRAINT [FK_MST_ROUTE_ZONE_
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
 ALTER TABLE [dbo].[MST_ROUTE_ZONE] WITH CHECK ADD CONSTRAINT [FK_MST_ROUTE_ZONE_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
+    FOREIGN KEY([WHSEID], [OWNERKEY], [TRANSPORTZONEKEY])
+    REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([WHSEID], [OWNERKEY], [TRANSPORTZONEKEY])
 GO
 
-/* หนึ่งโซนมีสายหลักได้สายเดียว — ใช้เสนอสายส่งให้อัตโนมัติตอนสร้างเอกสาร */
-CREATE UNIQUE INDEX [UX_MST_ROUTE_ZONE_DEFAULT]
-    ON [dbo].[MST_ROUTE_ZONE] ([ZONE]) WHERE [DEFAULT_FLAG] = 1
+/* ลำดับการวิ่งห้ามซ้ำในสายเดียวกัน — ไม่งั้นไม่รู้ว่าโซนไหนก่อน */
+CREATE UNIQUE INDEX [UX_MST_ROUTE_ZONE_SEQ]
+    ON [dbo].[MST_ROUTE_ZONE] ([ROUTE], [SEQUENCE])
 GO
 
 /* -----------------------------------------------------------------------------
@@ -232,9 +262,9 @@ GO
 ALTER TABLE [dbo].[DOC_TRANSPORT_PLAN] WITH CHECK ADD CONSTRAINT [FK_DOC_TRANSPORT_PLAN_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
-ALTER TABLE [dbo].[DOC_TRANSPORT_PLAN] WITH CHECK ADD CONSTRAINT [FK_DOC_TRANSPORT_PLAN_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
-GO
+/* ZONE ยังไม่มี FK — ดูหมายเหตุ "ทำไมโซนถึงยังผูก FK ไม่ได้" ท้ายไฟล์นี้
+   คอลัมน์ตั้งชื่อว่า ZONE ไม่ใช่ TRANSPORTZONEKEY เพื่อให้ตรงกับ
+   DOC_SHIPMENT_HDR.ZONE / DOC_SHIPMENT_DETAIL.ZONE ที่แผนนี้ออกใบไปให้ */
 
 CREATE TABLE [dbo].[DOC_TRANSPORT_PLAN_LINE](
     [SERIALKEY]  [int] IDENTITY(1,1) NOT NULL,
@@ -330,7 +360,12 @@ CREATE TABLE [dbo].[MST_CUSTOMER](
        ที่ใช้ decimal(18,10) อยู่แล้ว เพื่อให้เทียบค่ากันได้ตรง */
     [LATITUDE]            [decimal](18, 10) NULL,
     [LONGITUDE]           [decimal](18, 10) NULL,
-    [ZONE]                [nvarchar](20)  NULL,      -- ได้จาก POSTALCODE ผ่าน MST_ZONE_COVERAGE
+    /* โซนจัดส่ง — ชื่อคอลัมน์ตาม MST_SHIPTO.TRANSPORTZONEKEY ที่ R03 เพิ่มมา
+       ไม่ได้ผูก FK ไป MST_TRANSPORTATIONZONE เพราะ PK ของตารางนั้นคือ
+       (WHSEID, OWNERKEY, TRANSPORTZONEKEY) แต่ลูกค้าหนึ่งรายไม่จำเป็นต้อง
+       ผูกกับคลังใดคลังหนึ่ง (WHSEID ที่นี่ NULL ได้) → บังคับที่ backend แทน
+       ค่าได้มาจาก POSTALCODE ผ่าน MST_ZONE_COVERAGE */
+    [TRANSPORTZONEKEY]    [nvarchar](20)  NULL,
     [ROUTE]               [nvarchar](20)  NULL,      -- สายส่งประจำ ถ้ามี
     [CONTACTNAME]         [nvarchar](100) NULL,
     [CONTACTPHONE]        [nvarchar](50)  NULL,
@@ -360,9 +395,6 @@ GO
 ALTER TABLE [dbo].[MST_CUSTOMER] ADD CONSTRAINT [DF_MST_CUSTOMER_ADDDATE] DEFAULT (getdate()) FOR [ADDDATE]
 GO
 
-ALTER TABLE [dbo].[MST_CUSTOMER] WITH CHECK ADD CONSTRAINT [FK_MST_CUSTOMER_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
-GO
 ALTER TABLE [dbo].[MST_CUSTOMER] WITH CHECK ADD CONSTRAINT [FK_MST_CUSTOMER_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
@@ -377,7 +409,7 @@ ALTER TABLE [dbo].[MST_CUSTOMER] WITH CHECK ADD CONSTRAINT [CK_MST_CUSTOMER_WIND
         OR [TIMEWINDOW_FROM] < [TIMEWINDOW_TO])
 GO
 
-CREATE INDEX [IX_MST_CUSTOMER_ZONE] ON [dbo].[MST_CUSTOMER] ([ZONE]) WHERE [STATUS] = 'ACTIVE'
+CREATE INDEX [IX_MST_CUSTOMER_ZONE] ON [dbo].[MST_CUSTOMER] ([TRANSPORTZONEKEY]) WHERE [STATUS] = 'ACTIVE'
 GO
 
 /* -----------------------------------------------------------------------------
@@ -486,3 +518,46 @@ GO
 ALTER TABLE [dbo].[MST_USER_MODULE] WITH CHECK ADD CONSTRAINT [FK_MST_USER_MODULE_USER]
     FOREIGN KEY([USERKEY]) REFERENCES [dbo].[MST_USER] ([USERKEY]) ON DELETE CASCADE
 GO
+
+/* =============================================================================
+   หมายเหตุ · ทำไมคอลัมน์ ZONE ในตารางเอกสารถึงยังผูก FK ไม่ได้
+
+   `MST_TRANSPORTATIONZONE` มี PK เป็นสามคอลัมน์ (WHSEID, OWNERKEY,
+   TRANSPORTZONEKEY) แต่ตารางเอกสารที่อ้างโซน — `DOC_SHIPMENT_HDR.ZONE`,
+   `DOC_SHIPMENT_DETAIL.ZONE`, `MST_TRANSPORT_RATE.ZONE`,
+   `MST_TRANSPORTER_ROUTE.ZONE`, `DOC_TRANSPORT_PLAN.ZONE` — มีแค่คอลัมน์เดียว
+   FK ต้องมีคอลัมน์ครบตาม PK ปลายทาง จึงผูกไม่ได้ตามที่เป็นอยู่
+
+   ทางแก้มีสองทาง เลือกได้ทางเดียว และต้องให้ทีมที่ดูแลฐานตัดสิน
+
+   ทาง 1 · รหัสโซนเป็น global (แนะนำถ้าข้อมูลจริงเป็นแบบนั้น)
+   ถ้า TRANSPORTZONEKEY ไม่เคยซ้ำข้ามคลัง/ข้ามเจ้าของ ก็เพิ่ม unique index
+   แล้ว FK คอลัมน์เดียวจะผูกได้ทั้งหมด ตรวจก่อนด้วย query นี้ ต้องได้ 0 แถว:
+
+     SELECT TRANSPORTZONEKEY, COUNT(*) AS n
+     FROM   dbo.MST_TRANSPORTATIONZONE
+     GROUP  BY TRANSPORTZONEKEY
+     HAVING COUNT(*) > 1;
+
+   ได้ 0 แถวแล้วค่อยรัน:
+
+     CREATE UNIQUE INDEX [UX_MST_TRANSPORTATIONZONE_KEY]
+         ON [dbo].[MST_TRANSPORTATIONZONE] ([TRANSPORTZONEKEY]);
+
+     ALTER TABLE [dbo].[DOC_SHIPMENT_HDR]    WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_HDR_ZONE]
+         FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([TRANSPORTZONEKEY]);
+     ALTER TABLE [dbo].[DOC_SHIPMENT_DETAIL] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_DETAIL_ZONE]
+         FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([TRANSPORTZONEKEY]);
+     ALTER TABLE [dbo].[MST_TRANSPORT_RATE]  WITH CHECK ADD CONSTRAINT [FK_TRANSPORT_RATE_ZONE]
+         FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([TRANSPORTZONEKEY]);
+     ALTER TABLE [dbo].[DOC_TRANSPORT_PLAN]  WITH CHECK ADD CONSTRAINT [FK_DOC_TRANSPORT_PLAN_ZONE]
+         FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_TRANSPORTATIONZONE] ([TRANSPORTZONEKEY]);
+
+   ทาง 2 · รหัสโซนซ้ำข้ามคลังได้
+   ต้องเพิ่ม OWNERKEY ลงในตารางเอกสารที่ยังไม่มี แล้วผูก FK สามคอลัมน์ —
+   แตะโครงสร้างเยอะกว่ามาก และต้อง backfill ค่าเดิม ควรทำก็ต่อเมื่อ query
+   ข้างบนคืนแถวออกมาจริง ๆ เท่านั้น
+
+   จนกว่าจะเลือกได้ **backend ต้องตรวจเองว่าโซนที่รับเข้ามามีอยู่จริง** —
+   ไม่มี constraint ไหนกันให้อยู่ตอนนี้
+============================================================================= */

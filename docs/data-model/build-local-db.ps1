@@ -1,0 +1,110 @@
+﻿<#
+.SYNOPSIS
+    สร้างฐาน MMDEV ในเครื่องขึ้นใหม่ทั้งใบ จากสคริปต์ในโฟลเดอร์นี้
+
+.DESCRIPTION
+    รันสี่ไฟล์ตามลำดับ แต่ละไฟล์ต้องผ่านก่อนถึงจะไปต่อ:
+
+      1. 00-user-defined-types.sql   UDT ที่ script ของฐานอ้างถึงแต่ไม่ได้แนบมา
+      2. <schema>                    DDL ของฐานจริง (ไม่ได้อยู่ใน repo ดู -SchemaFile)
+      3. 01-new-tables.sql           ตารางที่ยังไม่มีในฐาน
+      4. 02-alter-existing.sql       PK/ชนิดข้อมูล/FK/ดัชนีที่ต้องแก้
+
+    **ลบฐานเดิมทิ้งทุกครั้ง** ตั้งใจให้เป็นแบบนั้น เพราะฐานนี้มีไว้ทดสอบว่า
+    สคริปต์รันผ่านบนของเปล่า ไม่ใช่ที่เก็บข้อมูลที่ต้องรักษา — อย่าชี้ไปฐานที่มี
+    ข้อมูลจริง สคริปต์จะถามยืนยันถ้าฐานปลายทางมีข้อมูลอยู่
+
+.PARAMETER SchemaFile
+    พาธของ DDL ฐานจริง (MAMMOD_TABLE2_R03.sql) ซึ่ง **ไม่ได้อยู่ใน repo**
+    เพราะเป็นโครงสร้างฐาน production ของลูกค้า ค่าเริ่มต้นมองหาที่
+    docs/data-model/vendor/ ซึ่ง gitignore ไว้แล้ว
+
+.EXAMPLE
+    .\build-local-db.ps1
+    .\build-local-db.ps1 -Server ".\SQLEXPRESS" -Database MMDEV -SchemaFile "$HOME\Downloads\MAMMOD_TABLE2_R03.sql"
+#>
+[CmdletBinding()]
+param(
+    [string] $Server     = '.\SQLEXPRESS',
+    [string] $Database   = 'MMDEV',
+    [string] $SchemaFile = "$PSScriptRoot\vendor\MAMMOD_TABLE2_R03.sql",
+    [switch] $Force
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Invoke-SqlFile {
+    param([string] $Path, [string] $Db)
+
+    $name = Split-Path $Path -Leaf
+    Write-Host "  -> $name" -ForegroundColor DarkGray
+
+    # -b ให้ sqlcmd คืน exit code ที่ไม่ใช่ 0 เมื่อเจอ error ระดับ 11 ขึ้นไป
+    # ถ้าไม่ใส่ สคริปต์จะเดินต่อเงียบ ๆ ทั้งที่ครึ่งไฟล์ล้ม
+    $out = & sqlcmd -S $Server -E -C -d $Db -b -i $Path 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "     ล้มที่ $name" -ForegroundColor Red
+        $out | Select-String -Pattern '^Msg |^Cannot |^Column ' | Select-Object -First 20 |
+            ForEach-Object { Write-Host "     $_" -ForegroundColor Red }
+        throw "$name ล้ม — ดู error ด้านบน"
+    }
+}
+
+if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
+    throw 'ไม่พบ sqlcmd — ติดตั้ง "SQL Server Command Line Utilities" หรือ SQL Server Management Studio ก่อน'
+}
+
+if (-not (Test-Path $SchemaFile)) {
+    throw @"
+ไม่พบไฟล์ DDL ของฐานจริงที่ $SchemaFile
+
+ไฟล์นี้ไม่ได้อยู่ใน repo โดยตั้งใจ — เป็นโครงสร้างฐาน production ของลูกค้า
+ขอจากทีมที่ดูแลฐาน แล้ววางไว้ที่ docs/data-model/vendor/ (โฟลเดอร์นั้น gitignore แล้ว)
+หรือชี้ตรง ๆ ด้วย -SchemaFile
+"@
+}
+
+# ฐานที่มีข้อมูลอยู่ = อาจไม่ใช่ฐานทดสอบ ถามก่อนลบ
+$rows = & sqlcmd -S $Server -E -C -h -1 -W -Q @"
+SET NOCOUNT ON;
+IF DB_ID('$Database') IS NULL SELECT -1
+ELSE EXEC('USE [$Database]; SELECT ISNULL(SUM(p.rows), 0) FROM sys.partitions p JOIN sys.tables t ON t.object_id = p.object_id WHERE p.index_id IN (0,1)');
+"@ 2>&1 | Select-Object -First 1
+
+if ($rows -match '^\d+$' -and [int]$rows -gt 0 -and -not $Force) {
+    Write-Host "ฐาน [$Database] บน $Server มีข้อมูลอยู่ $rows แถว" -ForegroundColor Yellow
+    $ans = Read-Host 'สคริปต์นี้จะลบทั้งฐานทิ้ง พิมพ์ชื่อฐานเพื่อยืนยัน'
+    if ($ans -ne $Database) { throw 'ยกเลิก — ไม่ได้ยืนยันชื่อฐาน' }
+}
+
+Write-Host "สร้าง [$Database] บน $Server ใหม่" -ForegroundColor Cyan
+& sqlcmd -S $Server -E -C -b -Q @"
+IF DB_ID('$Database') IS NOT NULL
+BEGIN
+    ALTER DATABASE [$Database] SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE [$Database];
+END
+CREATE DATABASE [$Database];
+"@ | Out-Null
+if ($LASTEXITCODE -ne 0) { throw "สร้างฐานไม่สำเร็จ" }
+
+Invoke-SqlFile "$PSScriptRoot\00-user-defined-types.sql" $Database
+Invoke-SqlFile $SchemaFile                               $Database
+Invoke-SqlFile "$PSScriptRoot\01-new-tables.sql"         $Database
+Invoke-SqlFile "$PSScriptRoot\02-alter-existing.sql"     $Database
+
+Write-Host "`nเสร็จแล้ว" -ForegroundColor Green
+& sqlcmd -S $Server -E -C -d $Database -h -1 -W -Q @"
+-- ป้ายกำกับตรงนี้เป็นอังกฤษเพราะ console ของ sqlcmd ใช้ codepage เดิมของ Windows
+-- ภาษาไทยจะออกมาเป็น ????? ส่วนคอมเมนต์กับข้อความอื่นในสคริปต์ผ่าน Write-Host
+-- ซึ่งแสดงไทยได้ปกติ
+SET NOCOUNT ON;
+SELECT 'tables       ' + CAST(COUNT(*) AS varchar) FROM sys.tables;
+SELECT 'primary keys ' + CAST(COUNT(*) AS varchar) FROM sys.key_constraints WHERE type = 'PK';
+SELECT 'foreign keys ' + CAST(COUNT(*) AS varchar) FROM sys.foreign_keys;
+SELECT 'indexes      ' + CAST(COUNT(*) AS varchar) FROM sys.indexes WHERE is_primary_key = 0 AND type > 0;
+SELECT 'tables without a primary key: ' + ISNULL(STRING_AGG(name, ', '), 'none')
+FROM   sys.tables t
+WHERE  NOT EXISTS (SELECT 1 FROM sys.key_constraints k
+                   WHERE k.parent_object_id = t.object_id AND k.type = 'PK');
+"@

@@ -1,6 +1,6 @@
 # โมเดลข้อมูล MamMoD — สิ่งที่ต้องเพิ่มและแก้
 
-เทียบ **schema จริง** (`MAMMOD_TABLE2_R02.sql`, ฐาน `MMPRD`) กับไดอะแกรม ER
+เทียบ **schema จริง** (`MAMMOD_TABLE2_R03.sql`, ฐาน `MMDEV`) กับไดอะแกรม ER
 และกับ data model ที่หน้าจอใช้จริงใน `src/features`
 
 > สำเนามาจาก repo ฝั่ง frontend (`Mammod_FrontEnd/docs/data-model`) เพื่อให้
@@ -12,11 +12,62 @@
 | --- | --- |
 | [`er-transport-shipment.mmd`](./er-transport-shipment.mmd) | ER ฝั่งขนส่งตามของจริง + ที่เสนอเพิ่ม |
 | [`er-wms-core.mmd`](./er-wms-core.mmd) | ER ฝั่งคลังตามของจริง |
-| [`01-new-tables.sql`](./01-new-tables.sql) | **7 ตารางใหม่** ตามธรรมเนียมของฐานจริง |
-| [`02-alter-existing.sql`](./02-alter-existing.sql) | PK ที่หายไป · float→decimal · คอลัมน์ที่ขาด · FK · ดัชนี · rowversion |
+| [`00-user-defined-types.sql`](./00-user-defined-types.sql) | UDT 21 ตัวที่ script ฐานอ้างถึงแต่ไม่ได้แนบมา — ไม่มีอันนี้ สร้างฐานเปล่าไม่ได้เลย |
+| [`01-new-tables.sql`](./01-new-tables.sql) | **10 ตารางใหม่** ตามธรรมเนียมของฐานจริง |
+| [`02-alter-existing.sql`](./02-alter-existing.sql) | ชนิดข้อมูลที่ต้องอุดก่อน · PK ที่หายไป · float→decimal · คอลัมน์ที่ขาด · FK · ดัชนี · rowversion |
+| [`build-local-db.ps1`](./build-local-db.ps1) | รันทั้งสี่ไฟล์ตามลำดับ สร้างฐาน `MMDEV` ในเครื่องขึ้นใหม่ทั้งใบ |
 
-> เอกสารรอบแรกเขียนจากไดอะแกรมเท่านั้น จึงสรุปผิดหลายข้อ — หัวข้อ 1 คือ
-> รายการที่ถอนคืน เก็บไว้เพื่อไม่ให้ใครหยิบข้อสรุปเก่าไปใช้ต่อ
+> **อัปเดต R02 → R03** เอกสารนี้เขียนครั้งแรกจาก `MAMMOD_TABLE2_R02.sql`
+> R03 เพิ่มสองตาราง (`MST_TRANSPORTATIONZONE`, `TRX_TODODETAIL`) กับคอลัมน์
+> `MST_SHIPTO.TRANSPORTZONEKEY` → ข้อเสนอเรื่องโซนจัดส่งถูกปรับตามแล้ว
+> ดูหัวข้อ 3 · ที่เหลือของ R02 ยังเหมือนเดิมทุกตาราง
+>
+> **สคริปต์ทั้งชุดรันผ่านจริงแล้ว** บน SQL Server 2025 Express กับฐานเปล่า
+> ผลลัพธ์: 59 ตาราง · 59 primary key (ครบทุกตาราง) · 41 foreign key · 209 ดัชนี
+> ข้อผิดพลาดที่เจอตอนรันถูกแก้กลับเข้าไปในไฟล์แล้ว ไม่ได้ปล่อยไว้
+> วิธีสร้างฐานในเครื่องอยู่ท้ายไฟล์ หัวข้อ 7
+>
+> **ข้อสรุปเก่าที่ถอนคืนแล้ว** เอกสารรอบแรกเขียนจากไดอะแกรมเท่านั้น จึงสรุปผิด
+> หลายข้อ — หัวข้อ 1 คือรายการที่ถอนคืน เก็บไว้เพื่อไม่ให้ใครหยิบไปใช้ต่อ
+
+## 0 · ไดอะแกรมเทียบฐานทีละตาราง — อันไหนมีแล้ว อันไหนต้องเพิ่ม
+
+คำตอบสั้น: **ทุกตารางในไดอะแกรมมีอยู่ในฐานแล้ว ไม่ต้องสร้างใหม่สักใบ**
+บางใบชื่อไม่ตรง และบางใบมีคอลัมน์ไม่ครบตามที่วาด ที่ต้องเพิ่มจริงคือตารางที่
+**ไม่ได้อยู่ในไดอะแกรมเลย** (หัวข้อ 3)
+
+| กลุ่มในไดอะแกรม | ตารางในฐาน | สถานะ |
+| --- | --- | --- |
+| MASTER DATA | `MST_WHSE` `MST_OWNER` `MST_SKU` `MST_UOM` `MST_PACK` | ✅ มีครบ |
+| LOCATION MASTER | `MST_AREA` `MST_AREADETAIL` `MST_ZONE` `MST_LOCATION` | ✅ มีครบ |
+| INVENTORY | `TRX_SKUXLOC` `TRX_LOT` `TRX_LOTXLOCXID` `TRX_ITRN` | ✅ มีครบ |
+| TRANSPORTATION MASTER | `MST_TRANSPORTER` `MST_VEHICLETYPE` `MST_VEHICLE` `MST_DRIVER` `MST_TRANSPORT_RATE` `MST_TRANSPORTER_ROUTE` | ✅ มีครบ |
+| SHIPMENT MANAGEMENT | `DOC_SHIPMENT_HDR` `DOC_SHIPMENT_STOP` `DOC_SHIPMENT_DETAIL` `DOC_SHIPMENT_DETAIL_LINE` | ✅ มีครบ |
+| CONFIGURATION | `CFG_PUTAWAYSTRATEGY(+DETAIL)` `CFG_ALLOCATESTRATEGY(+DETAIL)` | ✅ มีครบ |
+| `DOC_SO_HDR` / `DOC_SO_DETAIL` | `DOC_DO_HDR` / `DOC_DO_DETAIL` | ⚠️ มี แต่**ชื่อในไดอะแกรมผิด** |
+| `DOC_RECEIPT_HDR` / `_DETAIL` | `DOC_RCPT_HDR` / `DOC_RCPT_TDETAIL` | ⚠️ มี แต่**ชื่อในไดอะแกรมผิด** |
+| `MST_TRANSPORT_DOCUMENT` | `MST_TRANSPORTER_DOCUMENT` | ⚠️ มี แต่**ชื่อในไดอะแกรมผิด** |
+
+**คอลัมน์ในไดอะแกรมที่ฐานไม่มีจริง** — ระดับคอลัมน์ ไม่ใช่ระดับตาราง
+
+| ไดอะแกรมวาดไว้ | ความจริง |
+| --- | --- |
+| `MST_UOM.BASEUOM` `CONVERSIONRATE` `DECIMALPLACES` | **ไม่มีเลย** `MST_UOM` มีแค่ `UM`, `UM_DESCR` การแปลงหน่วยอยู่ใน `MST_PACK` แบบ 9 ชั้น |
+| `DOC_RECEIPT_HDR.ASNKEY` | **ไม่มีคอลัมน์นี้ และไม่มีตาราง ASN** — ไดอะแกรมวาดเกิน |
+| `MST_AREA.AREAKEY` | ฐานใช้ `AREACODE` (PK = `WHSEID` + `AREACODE`) |
+| `MST_ZONE.ZONECODE` | ฐานใช้ `PUTAWAYZONE` (PK = `WHSEID` + `PUTAWAYZONE`) |
+| `DOC_SHIPMENT_HDR.TRANSPORTERKEYK` | สะกดถูกในฐาน (`TRANSPORTERKEY`) พิมพ์ผิดเฉพาะในไดอะแกรม |
+
+**20 ตารางที่มีในฐานแต่ไดอะแกรมไม่ได้วาด** — อ่านไดอะแกรมอย่างเดียวจะไม่เห็น
+
+`MST_SHIPTO` `MST_VENDOR` `MST_ALTSKU` `MST_TRANSPORTATIONZONE`
+`MST_UserDefinedTypes` `MST_UserDefinedTypeValues` `TRX_TAGID` `TRX_DROPID`
+`TRX_DROPIDDETAIL` `TRX_LOTATTRIBUTE` `TRX_LOTXIDDETAIL` `TRX_INVENTORYHOLD`
+`TRX_INVENTORYHOLDCODE` `TRX_TODODETAIL` `DOC_PO` `DOC_PODETAIL`
+`DOC_DO_PICKDETAIL` `MST_TRANSPORTER_ROUTE` `MST_TRANSPORTER_DOCUMENT` `MST_WHSE`
+
+→ **ห้ามใช้ไดอะแกรมเป็นแหล่งอ้างอิงโครงสร้าง** ใช้ `MAMMOD_TABLE2_R03.sql`
+หรือฐานที่สร้างจากหัวข้อ 7 แล้ว query `sys.tables` เอา
 
 ## 1 · ข้อสรุปที่ถอนคืน (ไดอะแกรมไม่ตรงกับฐาน)
 
@@ -84,7 +135,14 @@ FK ชี้มาไม่ได้, และ EF Core ต้อง map เป�
 หน่วยสตางค์และกระทบยอดไม่ได้ ขณะที่ `DOC_SHIPMENT_DETAIL_LINE` ใช้
 `decimal(22,5)` อยู่แล้ว จึงไม่สม่ำเสมอกันเองด้วย
 
-### 2.4 ไม่มี MST_ROUTE / ไม่มีตารางโซนจัดส่ง
+### 2.4 ไม่มี MST_ROUTE (ส่วนโซนจัดส่ง R03 แก้ไปแล้วครึ่งหนึ่ง)
+
+> **แก้ไปแล้วใน R03** `MST_TRANSPORTATIONZONE` มาแล้ว พร้อม
+> `MST_SHIPTO.TRANSPORTZONEKEY` ที่ชี้กลับหา → ย่อหน้าข้างล่างที่พูดถึง `ZONE`
+> ว่าไม่มีตารางแม่ **ใช้ไม่ได้แล้ว** ที่ยังจริงคือ `ROUTE` ซึ่งยังไม่มีตารางแม่
+> และข้อจำกัดใหม่: `MST_TRANSPORTATIONZONE` ถือกฎพื้นที่ได้โซนละกฎเดียว
+> (PK ไม่มีคอลัมน์พื้นที่) โซนที่กินหลายจังหวัดจึงยังเขียนไม่ได้ →
+> `MST_ZONE_COVERAGE` ในหัวข้อ 3 มาเติมส่วนนั้น
 
 `ROUTE` และ `ZONE` เป็นคอลัมน์ `nvarchar` ลอยอยู่ใน `DOC_DO_HDR`,
 `DOC_SHIPMENT_HDR`, `DOC_SHIPMENT_DETAIL`, `DOC_DO_PICKDETAIL`,
@@ -168,14 +226,43 @@ PK เป็น `(LOT, OWNERKEY, SKU)` ขณะที่ทุกตารา�
 ถ้าคลังคนละแห่งรับของจากผู้ผลิตเดียวกันที่ใช้เลขล็อตชุดเดียวกัน จะชนกันทันที
 ต้องยืนยันว่าเป็นเจตนา (ล็อตเป็น global) หรือเป็นความพลาด
 
+### 2.10 คอลัมน์เดียวกันคนละความยาว → FK ผูกไม่ได้ และข้อมูลหายตอนไหลข้ามตาราง
+
+เจอตอนรันสคริปต์จริง ไม่ได้เจอจากการอ่าน — SQL Server ตอบ **Msg 1753**
+"Columns participating in a foreign key relationship must be defined with the
+same length and scale" FK จึงสร้างไม่ขึ้น แต่ปัญหาที่ใหญ่กว่าคือความหมาย:
+ค่าที่ยาวเกินฝั่งแคบ **เขียนกลับไปไม่ได้**
+
+| คอลัมน์ | ยาวเท่าไหร่ในแต่ละตาราง | ผล |
+| --- | --- | --- |
+| `ROUTE` | 20 ใน `DOC_SHIPMENT_HDR` `DOC_SHIPMENT_DETAIL` `MST_TRANSPORT_RATE` `MST_TRANSPORTER_ROUTE` · **10** ใน `DOC_DO_HDR` `TRX_TODODETAIL` · **18** ใน `DOC_DO_PICKDETAIL` | รหัสสายส่งยาวเกิน 10 อยู่บนใบปิดบรรทุกได้ แต่เขียนกลับลงใบสั่งส่งต้นทางไม่ได้ |
+| `LOC` | 30 ใน `MST_LOCATION` · **10** ใน `TRX_LOTXLOCXID` `TRX_SKUXLOC` และ `TRX_ITRN.FROMLOC/TOLOC` | ตั้งรหัสตำแหน่งยาว 30 ในตาราง master ได้ แล้วบันทึกของเข้าไปในตำแหน่งนั้นไม่ได้ |
+| `OWNERKEY` | 15 ใน 16 ตาราง · **20** ใน `DOC_SHIPMENT_DETAIL` `DOC_SHIPMENT_DETAIL_LINE` `MST_TRANSPORTATIONZONE` `MST_VENDOR` | FK ไป `MST_OWNER` ผูกได้ไม่ครบทุกตาราง |
+
+`02-alter-existing.sql` ส่วน A.1 ขยายฝั่งแคบให้เท่าฝั่งกว้าง — **ขยายเท่านั้น
+ไม่หด** เพราะหดจะตัดค่าที่มีอยู่ทิ้ง ส่วน `OWNERKEY` ยังไม่แตะ เพราะต้องเลือกก่อน
+ว่าจะยึด 15 หรือ 20 เป็นมาตรฐาน ซึ่งกระทบทั้งฐาน
+
+### 2.11 `WHSEID` เป็น NULL ได้ทุกตาราง จึงใส่ PK ไม่ได้เลยสักใบ
+
+อาการต่อยอดจากหัวข้อ 2.1 และ 2.2 ที่เห็นชัดตอนรันจริง: PK ทุกอันในส่วน A
+ขึ้นต้นด้วย `WHSEID` แต่ฐานประกาศ `[WHSEID] nvarchar(30) NULL` ไว้ทุกตาราง →
+**Msg 8111 "Cannot define PRIMARY KEY constraint on nullable column"**
+ล้มพร้อมกัน 14 ตาราง แล้ว FK ที่ชี้มาหาก็ล้มตาม (Msg 1776) เป็นลูกโซ่
+
+`02-alter-existing.sql` ส่วน A.0 จึง `ALTER COLUMN … NOT NULL` ก่อนใส่ PK
+พร้อม query นับ NULL กำกับไว้ — **บนฐานจริง ALTER จะล้มถ้ามีแถวที่ `WHSEID`
+เป็น NULL** ซึ่งตั้งใจให้ล้ม เพราะต้องรู้ว่าแถวพวกนั้นเป็นของคลังไหน
+ไม่ใช่เดาแล้วเติม
+
 ## 3 · ตารางที่เสนอเพิ่ม (10 ตาราง)
 
 | ตาราง | เหตุผล |
 | --- | --- |
 | `MST_ROUTE` | ให้ `ROUTE` ที่ลอยอยู่ 6 ตารางมีตารางแม่ |
-| `MST_DELIVERY_ZONE` | โซนจัดส่ง แยกจาก `MST_ZONE` ที่เป็นโซนในคลัง |
-| `MST_ZONE_COVERAGE` | โซน ↔ จังหวัด/อำเภอ/ตำบล/ไปรษณีย์ = ตัวที่ทำให้จัดโซนอัตโนมัติได้ |
-| `MST_ROUTE_ZONE` | สายส่ง ↔ โซน + ลำดับการวิ่ง + สายหลักของโซน |
+| ~~`MST_DELIVERY_ZONE`~~ | **ถอนออก — R03 มี `MST_TRANSPORTATIONZONE` แล้ว** สร้างซ้ำจะได้โซนสองชุดที่ไม่ตรงกัน |
+| `MST_ZONE_COVERAGE` | โซน ↔ จังหวัด/อำเภอ/ตำบล/ไปรษณีย์ · เป็น **ลูก** ของ `MST_TRANSPORTATIONZONE` เพราะตัวแม่ถือกฎพื้นที่ได้โซนละกฎเดียว |
+| `MST_ROUTE_ZONE` | สายส่ง ↔ โซน + ลำดับการวิ่ง (ไม่มี "สายหลัก" แล้ว — `MST_TRANSPORTATIONZONE.DEFAULTROUTE` ถืออยู่) |
 | `DOC_TRANSPORT_PLAN` / `_LINE` | ชั้นแผน `PL-…` ที่ออกใบปิดบรรทุก |
 | `DOC_SHIPMENT_STATUS_LOG` | timeline 5 ขั้น + ข้อความที่ WMS/OMS ตีกลับ |
 | `MST_CUSTOMER` | ตารางลูกค้าที่ FK ชี้ได้จริง — `MST_SHIPTO` ทำหน้าที่นี้ไม่ได้เพราะ `SHIPTO` ไม่ unique, ที่อยู่เป็นแบบตะวันตก, พิกัดเป็นข้อความ |
@@ -198,22 +285,29 @@ WHERE  NOT EXISTS (SELECT 1 FROM dbo.MST_CUSTOMER c WHERE c.CUSTOMERKEY = s.SHIP
 จากนั้นเติมโซนจากรหัสไปรษณีย์:
 
 ```sql
-UPDATE c SET c.[ZONE] = v.[ZONE]
+UPDATE c SET c.TRANSPORTZONEKEY = v.TRANSPORTZONEKEY
 FROM   dbo.MST_CUSTOMER c
 JOIN   dbo.MST_ZONE_COVERAGE v ON v.POSTALCODE = c.POSTALCODE
-WHERE  c.[ZONE] IS NULL;
+WHERE  c.TRANSPORTZONEKEY IS NULL;
 ```
 
 ## 4 · ลำดับที่ควรทำ
 
-1. **`01-new-tables.sql`** — เพิ่ม 7 ตาราง (ไม่แตะข้อมูลเดิม รันได้ทันที)
-2. **โหลด master**: route → delivery zone → zone coverage → customer
-3. **ส่วน A ของ `02`** — ใส่ PK ที่หายไป มี query หาแถวซ้ำกำกับทุกตาราง
+0. **`00-user-defined-types.sql`** — เฉพาะฐานที่สร้างใหม่จากศูนย์ · ฐาน
+   production มี UDT พวกนี้อยู่แล้ว ไฟล์นี้เขียนแบบ `IF TYPE_ID(…) IS NULL`
+   จึงรันซ้ำได้โดยไม่ทับของเดิม
+1. **`01-new-tables.sql`** — เพิ่ม 10 ตาราง (ไม่แตะข้อมูลเดิม รันได้ทันที)
+2. **โหลด master**: route → zone coverage → route zone → customer
+   (โซนเองไม่ต้องโหลด — `MST_TRANSPORTATIONZONE` มีข้อมูลอยู่แล้ว)
+3. **ส่วน A.0 / A.1 ของ `02`** ← **ตรงนี้จะเจ็บที่สุดบนฐานจริง**
+   บังคับ `WHSEID` เป็น NOT NULL และขยายความยาว `ROUTE`/`LOC` ให้ตรงกัน
+   ทั้งสองอย่างจะล้มถ้าข้อมูลเดิมไม่ผ่าน มี query ตรวจกำกับไว้ในไฟล์
+4. **ส่วน A ที่เหลือ** — ใส่ PK ที่หายไป มี query หาแถวซ้ำกำกับทุกตาราง
    ต้องได้ 0 แถวก่อนใส่ · `MST_WHSE` กับ `MST_SHIPTO` ถูก comment ไว้เพราะ
    ต้องยืนยันข้อมูลก่อน
-4. **ส่วน B** — `float` → `decimal` (สำรองตารางก่อน การ ALTER ปัดค่าเดิม)
-5. **ส่วน C–E** — คอลัมน์ที่ขาด, FK, ดัชนี, view ตรวจยอดรวม
-6. **ส่วน F–G** — rowversion และเก็บกวาด
+5. **ส่วน B** — `float` → `decimal` (สำรองตารางก่อน การ ALTER ปัดค่าเดิม)
+6. **ส่วน C–E** — คอลัมน์ที่ขาด, FK, ดัชนี, view ตรวจยอดรวม
+7. **ส่วน F–G** — rowversion และเก็บกวาด
 
 ## 5 · ที่ต้องยืนยันก่อนรัน
 
@@ -234,9 +328,16 @@ WHERE  c.[ZONE] IS NULL;
 6. **`MST_VEHICLETYPE.MAXPALLET` / `MAXUNITS`** — ฝั่งขนส่งของ UI ไม่มีแนวคิด
    พาเลทเลย จะใช้จริงหรือไม่
 7. **นิยาม user-defined type** (`dbo.NameType`, `dbo.AddressType`, `dbo.SiteType`,
-   `dbo.DropSeqType`, `dbo.PostalCodeType` …) ไม่อยู่ในสคริปต์ → ต้องดึงจากฐานจริง
-   ด้วย `SELECT name, system_type_id, max_length, is_nullable FROM sys.types
-   WHERE is_user_defined = 1` ก่อนจะ generate DTO ฝั่ง .NET ได้
+   `dbo.DropSeqType`, `dbo.PostalCodeType` …) ไม่อยู่ในสคริปต์ →
+   [`00-user-defined-types.sql`](./00-user-defined-types.sql) **เดาความยาวเอา**
+   เพื่อให้สร้างฐาน dev ในเครื่องได้ ค่าจริงต้องดึงจากฐาน production ด้วย
+   `SELECT name, max_length, precision, scale FROM sys.types WHERE is_user_defined = 1`
+   แล้วแทนค่าในไฟล์นั้น ก่อนจะเชื่อผลทดสอบใด ๆ ที่เกี่ยวกับความยาวข้อมูล
+8. **`TRANSPORTZONEKEY` ซ้ำข้ามคลังหรือไม่** — ตัดสินว่าจะผูก FK ของ `ZONE`
+   ในตารางเอกสารได้แบบคอลัมน์เดียวหรือต้องเพิ่ม `OWNERKEY` เข้าไปด้วย
+   query ตรวจอยู่ท้าย [`01-new-tables.sql`](./01-new-tables.sql)
+9. **`OWNERKEY` จะยึด 15 หรือ 20** — ตอนนี้มีทั้งสองความยาวในฐานเดียวกัน
+   (หัวข้อ 2.10) ยังไม่แก้ให้เพราะกระทบทุกตาราง
 
 ## 6 · กฎที่ฐานบังคับไม่ได้ backend ต้องบังคับ
 
@@ -253,9 +354,54 @@ constraint ครอบได้เท่าที่ประกาศได้
 | แยกใบต้องเหลือของในใบแม่ | backend เท่านั้น |
 | น้ำหนักเกินพิกัด = **เตือน ไม่บล็อก** (ตัดสินใจไว้แล้ว) | ห้ามใส่ CHECK ห้ามเกิน — `UTILIZATION_WEIGHT` ที่มีอยู่ใช้แสดงผลได้เลย |
 
+## 7 · สร้างฐานในเครื่องเพื่อทดสอบ
+
+ฐานนี้มีไว้ให้ backend มีของจริงให้ยิง และให้พิสูจน์ว่าสคริปต์ทั้งชุดรันผ่าน —
+**ไม่ใช่สำเนาข้อมูล production** ที่สร้างขึ้นจะเป็นตารางเปล่าทั้งหมด
+
+ต้องมีก่อน: SQL Server (Express ก็พอ) · `sqlcmd` · ไฟล์ DDL ของฐานจริง
+`MAMMOD_TABLE2_R03.sql` ซึ่ง **ไม่ได้อยู่ใน repo** เพราะเป็นโครงสร้างฐาน
+production ของลูกค้า — ขอจากทีมที่ดูแลฐาน แล้ววางไว้ที่
+`docs/data-model/vendor/` (โฟลเดอร์นั้น gitignore ไว้แล้ว)
+
+```powershell
+cd docs\data-model
+.\build-local-db.ps1
+# หรือชี้ไฟล์เอง / เปลี่ยนปลายทาง
+.\build-local-db.ps1 -Server ".\SQLEXPRESS" -Database MMDEV -SchemaFile "$HOME\Downloads\MAMMOD_TABLE2_R03.sql"
+```
+
+สคริปต์ **ลบฐานปลายทางทิ้งก่อนเสมอ** และจะถามยืนยันถ้าฐานนั้นมีข้อมูลอยู่
+ผลลัพธ์ที่ถูกต้อง:
+
+```text
+tables       59
+primary keys 59
+foreign keys 41
+indexes      209
+tables without a primary key: none
+```
+
+**ต่อจาก VS Code** — ส่วนขยาย `ms-mssql.mssql` และโปรไฟล์ `MamMoD dev (MMDEV)`
+ตั้งไว้ให้แล้วใน [`.vscode/settings.json`](../../.vscode/settings.json)
+กด `Ctrl+Shift+P` → `MS SQL: Connect` → เลือกโปรไฟล์ ไม่ต้องกรอกอะไร
+ใช้ Windows Authentication จึงไม่มีรหัสผ่านที่ไหนเลย
+
+**ต่อจาก backend** — connection string อยู่ใน
+[`appsettings.Development.json`](../../appsettings.Development.json) ชื่อ `Mmdev`
+เป็น `Trusted_Connection` เหมือนกัน ไม่มีความลับ จึง commit ได้
+ตอนขึ้น production ให้ตั้งผ่าน environment variable `ConnectionStrings__Mmdev`
+แทน **อย่าใส่ user/password ลงไฟล์ที่ commit**
+
+> TCP/IP ของ SQL Server Express ในเครื่องนี้ปิดอยู่ ซึ่ง**ไม่เป็นไร** — ทั้ง
+> VS Code และ .NET ต่อผ่าน shared memory ได้เพราะอยู่เครื่องเดียวกัน
+> (ยืนยันแล้ว: `net_transport = Shared memory`) จะต้องเปิด TCP ก็ต่อเมื่อมี
+> เครื่องอื่นต้องต่อเข้ามา ซึ่งต้องใช้สิทธิ์ admin เปิดใน SQL Server
+> Configuration Manager แล้วรีสตาร์ท service
+
 ---
 
-อ้างอิง (ทั้งหมดอยู่ใน repo ฝั่ง frontend): `MAMMOD_TABLE2_R02.sql` (ฐาน MMPRD) ·
+อ้างอิง (ทั้งหมดอยู่ใน repo ฝั่ง frontend): `MAMMOD_TABLE2_R03.sql` (ฐาน MMDEV) ·
 `src/features/logistics/types` ·
 กฎที่ mock บังคับ: `src/features/logistics/api/manifests.mock.ts` ·
 ลำดับการทำงาน: `docs/tms-sequence.md`

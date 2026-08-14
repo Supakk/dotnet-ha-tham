@@ -1,0 +1,20 @@
+{
+  // โปรไฟล์ให้ส่วนขยาย SQL Server (ms-mssql.mssql) — กด Ctrl+Shift+P แล้วเลือก
+  // "MS SQL: Connect" จะเห็นชื่อนี้ในรายการโดยไม่ต้องกรอกอะไร
+  //
+  // ใช้ Integrated (Windows Authentication) จึง **ไม่มีรหัสผ่านในไฟล์นี้**
+  // และไม่ควรมี — ถ้าวันหนึ่งต้องต่อด้วย SQL login ให้ใส่แค่ user ไว้ตรงนี้
+  // แล้วปล่อยให้ส่วนขยายถามรหัสผ่านและเก็บลง credential store ของ Windows เอง
+  "mssql.connections": [
+    {
+      "profileName": "MamMoD dev (MMDEV)",
+      "server": ".\\SQLEXPRESS",
+      "database": "MMDEV",
+      "authenticationType": "Integrated",
+      // ใบรับรองของ SQL Server ที่ติดตั้งในเครื่องเป็น self-signed ตามปกติ
+      // ยอมรับได้เพราะต่อในเครื่องตัวเอง — บนเซิร์ฟเวอร์จริงห้ามตั้ง true
+      "trustServerCertificate": true,
+      "connectTimeout": 15
+    }
+  ]
+}

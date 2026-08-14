@@ -41,6 +41,107 @@ GO
      HAVING COUNT(*) > 1;
 ============================================================================= */
 
+/* -----------------------------------------------------------------------------
+   A.0 · WHSEID ต้อง NOT NULL ก่อน ไม่งั้นใส่ PK ไม่ได้เลยสักตาราง
+
+   ทุก PK ข้างล่างขึ้นต้นด้วย WHSEID แต่ฐานประกาศ `[WHSEID] nvarchar(30) NULL`
+   ไว้ทุกตาราง → SQL Server ตอบ **Msg 8111 "Cannot define PRIMARY KEY constraint
+   on nullable column"** และล้มทั้ง 14 ตารางรวด (ยืนยันแล้วด้วยการรันจริงบน
+   SQL Server 2025 Express กับฐานที่สร้างจาก R03) จึงต้องบังคับชนิดก่อน
+
+   ⚠ บนฐานที่มีข้อมูลจริง ALTER พวกนี้ **จะล้มถ้ามีแถวไหน WHSEID เป็น NULL**
+     ซึ่งเป็นเจตนา — ต้องรู้ว่าแถวพวกนั้นเป็นของคลังไหนก่อน ไม่ใช่เดาแล้วเติม
+     ตรวจก่อนด้วย query นี้ ต้องได้ 0 ทุกตาราง:
+
+       SELECT 'TRX_LOTXLOCXID'   AS t, COUNT(*) FROM dbo.TRX_LOTXLOCXID   WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_SKUXLOC',       COUNT(*) FROM dbo.TRX_SKUXLOC       WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_ITRN',          COUNT(*) FROM dbo.TRX_ITRN          WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_TAGID',         COUNT(*) FROM dbo.TRX_TAGID         WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_DROPID',        COUNT(*) FROM dbo.TRX_DROPID        WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_DROPIDDETAIL',  COUNT(*) FROM dbo.TRX_DROPIDDETAIL  WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_LOTATTRIBUTE',  COUNT(*) FROM dbo.TRX_LOTATTRIBUTE  WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_LOTXIDDETAIL',  COUNT(*) FROM dbo.TRX_LOTXIDDETAIL  WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_INVENTORYHOLD', COUNT(*) FROM dbo.TRX_INVENTORYHOLD WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_INVENTORYHOLDCODE', COUNT(*) FROM dbo.TRX_INVENTORYHOLDCODE WHERE WHSEID IS NULL
+       UNION ALL SELECT 'TRX_TODODETAIL',   COUNT(*) FROM dbo.TRX_TODODETAIL   WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_DO_DETAIL',    COUNT(*) FROM dbo.DOC_DO_DETAIL    WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_DO_PICKDETAIL',COUNT(*) FROM dbo.DOC_DO_PICKDETAIL WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_PO',           COUNT(*) FROM dbo.DOC_PO           WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_PODETAIL',     COUNT(*) FROM dbo.DOC_PODETAIL     WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_RCPT_HDR',     COUNT(*) FROM dbo.DOC_RCPT_HDR     WHERE WHSEID IS NULL
+       UNION ALL SELECT 'DOC_RCPT_TDETAIL', COUNT(*) FROM dbo.DOC_RCPT_TDETAIL WHERE WHSEID IS NULL;
+----------------------------------------------------------------------------- */
+ALTER TABLE [dbo].[TRX_LOTXLOCXID]        ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_SKUXLOC]           ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_ITRN]              ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_TAGID]             ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_DROPID]            ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_DROPIDDETAIL]      ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_LOTATTRIBUTE]      ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_LOTXIDDETAIL]      ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_INVENTORYHOLD]     ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_INVENTORYHOLDCODE] ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_TODODETAIL]        ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_DO_DETAIL]         ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_DO_PICKDETAIL]     ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_PO]                ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_PODETAIL]          ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_RCPT_HDR]          ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[DOC_RCPT_TDETAIL]      ALTER COLUMN [WHSEID] [nvarchar](30) NOT NULL
+GO
+
+/* -----------------------------------------------------------------------------
+   A.1 · คอลัมน์เดียวกันคนละความยาว — ต้องปรับก่อน ไม่งั้น FK ผูกไม่ได้
+
+   FK บังคับให้คอลัมน์สองฝั่ง **ความยาวเท่ากันเป๊ะ** (Msg 1753) และของจริง
+   ไม่เท่า ซึ่งไม่ใช่แค่เรื่องผูก FK — มันแปลว่าข้อมูลหายจริงตอนไหลข้ามตาราง
+
+   ROUTE  · MST_ROUTE / DOC_SHIPMENT_HDR / DOC_SHIPMENT_DETAIL /
+           MST_TRANSPORT_RATE / MST_TRANSPORTER_ROUTE = nvarchar(20)
+           แต่ DOC_DO_HDR = nvarchar(10) · DOC_DO_PICKDETAIL = nvarchar(18)
+           → รหัสสายส่งยาวเกิน 10 ตัวอยู่บนใบปิดบรรทุกได้ แต่เขียนกลับลง
+             ใบสั่งส่งต้นทางไม่ได้ (TRX_TODODETAIL.ROUTE ก็ 10 เหมือนกัน
+             แต่ยังไม่แตะเพราะเป็นคิวงานฝั่งคลัง ไม่ได้ผูก FK ในไฟล์นี้)
+
+   LOC    · MST_LOCATION.LOC = nvarchar(30)
+           แต่ TRX_LOTXLOCXID.LOC / TRX_SKUXLOC.LOC = nvarchar(10)
+           → ตั้งรหัสตำแหน่งยาว 30 ในตาราง master ได้ แล้วบันทึกของเข้าไป
+             ในตำแหน่งนั้นไม่ได้ · TRX_ITRN.FROMLOC/TOLOC ก็ 10 เช่นกัน
+
+   ทิศทางที่เลือกคือ **ขยายให้เท่าตัวที่กว้างสุด** ไม่ใช่หดตัวแม่ลง —
+   ขยายไม่ทำให้ข้อมูลเดิมหาย ส่วนหดอาจตัดค่าที่มีอยู่ทิ้ง
+   ต้องทำก่อนใส่ PK เพราะ LOC เป็นส่วนหนึ่งของ PK ที่จะใส่ข้างล่าง
+   (คอลัมน์ที่อยู่ใน PK แล้ว ALTER ไม่ได้จนกว่าจะ drop PK ทิ้งก่อน)
+----------------------------------------------------------------------------- */
+ALTER TABLE [dbo].[DOC_DO_HDR]        ALTER COLUMN [ROUTE] [nvarchar](20) NULL
+GO
+ALTER TABLE [dbo].[DOC_DO_PICKDETAIL] ALTER COLUMN [ROUTE] [nvarchar](20) NULL
+GO
+ALTER TABLE [dbo].[TRX_LOTXLOCXID]    ALTER COLUMN [LOC] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_SKUXLOC]       ALTER COLUMN [LOC] [nvarchar](30) NOT NULL
+GO
+ALTER TABLE [dbo].[TRX_ITRN]          ALTER COLUMN [FROMLOC] [nvarchar](30) NULL
+GO
+ALTER TABLE [dbo].[TRX_ITRN]          ALTER COLUMN [TOLOC]   [nvarchar](30) NULL
+GO
+
 /* คลังของ: ยอดคงเหลือต่อ ล็อต × ตำแหน่ง × พาเลท — ต้นฉบับของสต็อก */
 ALTER TABLE [dbo].[TRX_LOTXLOCXID] ADD CONSTRAINT [PK_TRX_LOTXLOCXID]
     PRIMARY KEY CLUSTERED ([WHSEID], [OWNERKEY], [SKU], [LOT], [LOC], [ID])
@@ -70,6 +171,19 @@ ALTER TABLE [dbo].[TRX_LOTATTRIBUTE] ADD CONSTRAINT [PK_TRX_LOTATTRIBUTE]
 GO
 ALTER TABLE [dbo].[TRX_INVENTORYHOLD] ADD CONSTRAINT [PK_TRX_INVENTORYHOLD]
     PRIMARY KEY CLUSTERED ([WHSEID], [INVENTORYHOLDKEY])
+GO
+ALTER TABLE [dbo].[TRX_INVENTORYHOLDCODE] ADD CONSTRAINT [PK_TRX_INVENTORYHOLDCODE]
+    PRIMARY KEY CLUSTERED ([WHSEID], [CODE])
+GO
+ALTER TABLE [dbo].[TRX_LOTXIDDETAIL] ADD CONSTRAINT [PK_TRX_LOTXIDDETAIL]
+    PRIMARY KEY CLUSTERED ([WHSEID], [LOTXIDKEY], [LOTXIDLINENUMBER])
+GO
+
+/* TRX_TODODETAIL เป็นตารางใหม่ใน R03 — คิวงานในคลัง (เบิก/เก็บ/ย้าย) ที่ทั้ง
+   PICKDETAILKEY, WAVEKEY, LISTKEY, ORDERKEY ชี้ออกไปหาเอกสารต้นทาง
+   มาแบบไม่มี PK เหมือนตาราง TRX_ อื่น ๆ */
+ALTER TABLE [dbo].[TRX_TODODETAIL] ADD CONSTRAINT [PK_TRX_TODODETAIL]
+    PRIMARY KEY CLUSTERED ([WHSEID], [TODODETAILKEY])
 GO
 
 /* เอกสารขาออก */
@@ -109,6 +223,16 @@ ALTER TABLE [dbo].[MST_UOM] ADD CONSTRAINT [PK_MST_UOM]
 GO
 ALTER TABLE [dbo].[MST_ALTSKU] ADD CONSTRAINT [PK_MST_ALTSKU]
     PRIMARY KEY CLUSTERED ([OWNERKEY], [SKU], [ALTSKU])
+GO
+
+/* ตารางรหัสกลาง — เก็บว่าฟิลด์ประเภทไหนมีค่าอะไรได้บ้าง
+   นี่คือที่ที่ควรตอบคำถาม "STATUS มีค่าอะไรได้บ้าง" ของ README หัวข้อ 5 ข้อ 2
+   ถ้าฐานจริงมีข้อมูลอยู่ในนี้ ให้ SELECT ออกมาก่อนจะไปถามทีมเดิม */
+ALTER TABLE [dbo].[MST_UserDefinedTypes] ADD CONSTRAINT [PK_MST_UserDefinedTypes]
+    PRIMARY KEY CLUSTERED ([Name])
+GO
+ALTER TABLE [dbo].[MST_UserDefinedTypeValues] ADD CONSTRAINT [PK_MST_UserDefinedTypeValues]
+    PRIMARY KEY CLUSTERED ([TypeName], [Value])
 GO
 
 /* config */
@@ -262,9 +386,8 @@ GO
 ALTER TABLE [dbo].[MST_TRANSPORT_RATE] WITH CHECK ADD CONSTRAINT [FK_TRANSPORT_RATE_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
-ALTER TABLE [dbo].[MST_TRANSPORT_RATE] WITH CHECK ADD CONSTRAINT [FK_TRANSPORT_RATE_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
-GO
+/* ZONE ยังผูกไม่ได้ — PK ของ MST_TRANSPORTATIONZONE เป็นสามคอลัมน์
+   ดูทางเลือกและ query ตรวจซ้ำที่ท้ายไฟล์ 01-new-tables.sql */
 
 /* ช่วงวันที่ต้องเรียงถูก ไม่งั้นเรตไม่มีวันถูกเลือก */
 ALTER TABLE [dbo].[MST_TRANSPORT_RATE] WITH CHECK ADD CONSTRAINT [CK_TRANSPORT_RATE_PERIOD]
@@ -307,9 +430,7 @@ GO
 ALTER TABLE [dbo].[DOC_DO_HDR] WITH CHECK ADD CONSTRAINT [FK_DO_HDR_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
-ALTER TABLE [dbo].[DOC_DO_HDR] WITH CHECK ADD CONSTRAINT [FK_DO_HDR_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
-GO
+/* FK ของ ZONE ยังผูกไม่ได้ — ดูท้ายไฟล์ 01-new-tables.sql */
 
 /* =============================================================================
    D · FK ที่ยังไม่ผูก
@@ -319,9 +440,6 @@ GO
 ============================================================================= */
 ALTER TABLE [dbo].[DOC_SHIPMENT_HDR] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_HDR_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
-GO
-ALTER TABLE [dbo].[DOC_SHIPMENT_HDR] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_HDR_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
 GO
 ALTER TABLE [dbo].[DOC_SHIPMENT_HDR] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_HDR_PLAN]
     FOREIGN KEY([WHSEID], [PLANKEY]) REFERENCES [dbo].[DOC_TRANSPORT_PLAN] ([WHSEID], [PLANKEY])
@@ -345,9 +463,7 @@ GO
 ALTER TABLE [dbo].[DOC_SHIPMENT_DETAIL] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_DETAIL_ROUTE]
     FOREIGN KEY([ROUTE]) REFERENCES [dbo].[MST_ROUTE] ([ROUTE])
 GO
-ALTER TABLE [dbo].[DOC_SHIPMENT_DETAIL] WITH CHECK ADD CONSTRAINT [FK_SHIPMENT_DETAIL_ZONE]
-    FOREIGN KEY([ZONE]) REFERENCES [dbo].[MST_DELIVERY_ZONE] ([ZONE])
-GO
+/* FK ของ ZONE ทั้งสองตารางนี้ยังผูกไม่ได้ — ดูท้ายไฟล์ 01-new-tables.sql */
 
 ALTER TABLE [dbo].[DOC_DO_DETAIL] WITH CHECK ADD CONSTRAINT [FK_DO_DETAIL_SKU]
     FOREIGN KEY([OWNERKEY], [SKU]) REFERENCES [dbo].[MST_SKU] ([OWNERKEY], [SKU])

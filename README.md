@@ -144,6 +144,18 @@ client เอาไปเทียบกับ `null` ตรง ๆ ถ้าต
 เพราะตารางส่วนใหญ่ในฐานจริง**ยังไม่มี PRIMARY KEY** ซึ่ง EF Core จะ map เป็น
 keyless entity ที่เขียนกลับไม่ได้ ต้องรัน `02-alter-existing.sql` ส่วน A ก่อน
 
+สร้างฐานสำหรับทดสอบในเครื่อง (SQL Server Express) ได้ด้วย:
+
+```powershell
+cd docs\data-model
+.\build-local-db.ps1
+```
+
+ได้ฐาน `MMDEV` ที่มี 59 ตาราง PK ครบทุกใบ ต่อได้ทั้งจาก VS Code (โปรไฟล์
+`MamMoD dev (MMDEV)` ตั้งไว้ใน `.vscode/settings.json` แล้ว) และจาก backend
+ผ่าน connection string ชื่อ `Mmdev` ใน `appsettings.Development.json`
+รายละเอียดกับสิ่งที่ต้องมีก่อน อยู่ใน [หัวข้อ 7 ของ data-model README](docs/data-model/README.md)
+
 ทำตามลำดับนี้ (ลอกรูปแบบจาก `KM_BE_Dev/OMS_KMTo/Database` ได้)
 
 1. `dotnet add package Microsoft.EntityFrameworkCore.SqlServer` และ `...EntityFrameworkCore.Design`

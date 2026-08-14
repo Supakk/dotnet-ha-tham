@@ -21,6 +21,10 @@ appsettings.Staging.json
 .vs/
 .idea/
 
+# DDL ของฐาน production ลูกค้า — ต้องมีไว้ถึงจะ build ฐานในเครื่องได้
+# แต่ไม่ใช่ของเรา และไม่ควรอยู่ใน repo สาธารณะ ขอจากทีมที่ดูแลฐานแล้ววางเอง
+docs/data-model/vendor/
+
 # ไฟล์ที่เครื่องมือฝั่ง frontend หลงมาสร้างไว้ในโฟลเดอร์นี้ ไม่ใช่ของโปรเจค .NET
 node_modules/
 package-lock.json
