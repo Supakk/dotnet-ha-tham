@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cd /c/Users/ASUS/Desktop/Mammod_BackEnd *)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\ASUS\\Desktop\\Mammod_BackEnd\\Models"
+    ]
+  }
+}

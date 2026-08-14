@@ -181,14 +181,21 @@ public sealed class MasterQueries(
     };
 
     /// <summary>
-    /// Falls back to capacity when the type key is not one of the three above,
-    /// because a real database will have keys this list has never seen and the
-    /// screen still has to draw something. Weight is the honest discriminator —
-    /// it is what actually separates the classes — and the thresholds sit at the
-    /// midpoints between 3,500 / 8,000 / 15,000 kg.
+    /// Three sources, tried in order of how much they can be trusted.
+    ///
+    /// The name comes first because <c>MST_VEHICLETYPE.VEHICLETYPENAME</c> now
+    /// holds these exact strings, so a database that has been set up this way
+    /// needs no translation at all. The key map covers a database that has not.
+    /// Capacity is the last resort: a real one will hold type keys this code has
+    /// never seen, and the screen still has to draw a truck. Weight is the honest
+    /// discriminator — it is what actually separates the classes — with the
+    /// thresholds at the midpoints between 3,500 / 8,000 / 15,000 kg.
     /// </summary>
     private static string VehicleClass(VehicleTypeRow? type, string typeKey)
     {
+        var name = type?.Name?.Trim();
+        if (name is not null && VehicleClasses.ContainsValue(name)) return name;
+
         if (VehicleClasses.TryGetValue(typeKey, out var known)) return known;
 
         var weight = type?.MaxWeight ?? 0;
