@@ -29,6 +29,12 @@ docs/data-model/vendor/
 node_modules/
 package-lock.json
 
+# Python test tooling
+__pycache__/
+.pytest_cache/
+.venv/
+venv/
+
 # certificate / private key
 *.pfx
 *.p12

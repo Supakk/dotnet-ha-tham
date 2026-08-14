@@ -1,245 +1,278 @@
-# Project TMS — Backend for Test
-waiting for ASP.NET Core (net8.0) follow stack 
+﻿# Project TMS Backend
 
-ตอนนี้ข้อมูลเก็บ **ในหน่วยความจำ** ยังไม่มีฐานข้อมูล — รีสตาร์ทแล้วข้อมูลกลับไปเป็นค่าตั้งต้น
-กติกาทางธุรกิจทั้งหมดของจริงอยู่ครบแล้ว ที่ขาดคือที่เก็บถาวร
+ASP.NET Core backend for the Project TMS/WMS training project.
 
-> ### ⚠️ โปรเจคนี้ไว้ฝึก ยังไม่พร้อมขึ้นใช้งานจริง
+The main stack is **.NET 8 / C#**. Python is used only as a helper layer for API
+smoke tests and development data generation.
+
+## Current State
+
+This backend stores data **in memory**. Restarting the API resets all transport
+plans, manifests, pending stops, master data, and generated rows back to the
+seed data.
+
+The core transport business rules are already enforced on the server, but the
+project is still a development/training backend, not production-ready.
+
+> Warning: do not expose this service publicly yet.
 >
-> **ยังไม่มีการตรวจรหัสผ่าน** — `/auth/login` รับอีเมลแล้วออก token ให้เลย ใครก็ตามที่
-> เข้าถึงเซิร์ฟเวอร์ได้ ขอ token เป็น `admin` ได้ทันที ถ้าเอาขึ้นอินเทอร์เน็ตตอนนี้
-> เท่ากับเปิดให้ทุกคนเป็นผู้ดูแลระบบ
+> `/auth/login` does not validate passwords. It accepts an email address and
+> issues a token. Anyone who can reach the server can request an admin-like
+> session.
 >
-> **ข้อมูลในนี้เป็นข้อมูลสมมติทั้งหมด** — ชื่อบริษัท เลขผู้เสียภาษี เบอร์โทร ทะเบียนรถ
-> ยกมาจาก fixture ของ frontend ไม่ใช่ข้อมูลลูกค้าจริง **ห้ามเอาข้อมูลลูกค้าจริงมาใส่
-> ใน `Data/Seed.cs`** เพราะไฟล์นั้นถูก commit ขึ้น repo สาธารณะ
->
-> ใช้บนเครื่องตัวเองหรือในวง LAN ที่ไว้ใจได้เท่านั้น อ่านหัวข้อ
-> [ก่อนเอาขึ้นเซิร์ฟเวอร์จริง](#ก่อนเอาขึ้นเซิร์ฟเวอร์จริง) ก่อน deploy
+> Seed data is fictional. Do not put real customer names, tax IDs, phone numbers,
+> license plates, secrets, or production data in `Data/Seed.cs`, the REST Client
+> `.http` file, or any committed test payload.
 
----
+## Requirements
 
-## รันยังไง
+- .NET SDK 8 or newer
+- Python 3.10 or newer, only for scripts in `tests/`
 
-ต้องมี [.NET SDK 8 ขึ้นไป](https://dotnet.microsoft.com/download) (เครื่องที่ตั้งไว้ใช้ 9.0.312 ซึ่ง build net8.0 ได้)
+## Run The API
 
-```bash
-cd Mammod_BackEnd
+```powershell
 dotnet run
 ```
 
-ขึ้นที่ `http://localhost:5080` — เปิด `http://localhost:5080/swagger` จะเห็น endpoint ทั้งหมด
-กดยิงทดสอบได้จากหน้านั้นเลย ไม่ต้องเปิด frontend
+The API listens on:
 
-ระหว่างพัฒนาใช้ `dotnet watch` แทน จะ compile ใหม่ให้อัตโนมัติทุกครั้งที่เซฟ
+```text
+http://localhost:5080
+```
 
-### ต่อกับ frontend
+Swagger is available during development:
 
-ในโปรเจค frontend สร้างไฟล์ `.env` (มีให้แล้ว):
+```text
+http://localhost:5080/swagger
+```
+
+For watch mode:
+
+```powershell
+dotnet watch
+```
+
+## Connect The Frontend
+
+In the frontend project, set the API base URL:
 
 ```ini
 VITE_API_BASE_URL=http://localhost:5080
 VITE_API_LIVE=auth,manifests,transportPlans,...
 ```
 
-แล้ว `npm run dev` ตามปกติ ฝั่ง frontend **ไม่ต้องแก้โค้ดเลยสักบรรทัด** —
-ทุก `api/xxx.ts` มีทั้งตัว mock และตัวยิง HTTP อยู่แล้ว และเลือกด้วยค่าใน `.env`
+Run both apps together:
 
-> ⚠️ ต้องรันทั้งสองตัวพร้อมกัน: backend ที่ 5080 และ frontend ที่ 5700
-> ถ้า backend ไม่ขึ้น ทุกจอจะว่างเปล่าพร้อมข้อความ "เชื่อมต่อเซิร์ฟเวอร์ไม่สำเร็จ"
+- Backend: `http://localhost:5080`
+- Frontend: `http://localhost:5700`
 
----
+If the backend is not running, frontend screens that use live APIs will show a
+server connection error.
 
-## โค้ดอยู่ตรงไหน
+## Project Map
 
-อ่านตามลำดับนี้จะเข้าใจเร็วที่สุด
-
-| โฟลเดอร์ | หน้าที่ | เริ่มอ่านที่ |
-| --- | --- | --- |
-| `Program.cs` | ตั้งค่าทุกอย่างและลำดับการทำงานของ request | ไฟล์เดียว อ่านบนลงล่าง |
-| `Models/` | หน้าตาข้อมูล — แปลงมาจาก type ฝั่ง frontend ทีละฟิลด์ | `Logistics.cs` |
-| `Dtos/` | หน้าตา **ที่ client ส่งเข้ามาได้** ซึ่งแคบกว่า Model | `Requests.cs` |
-| `Data/` | ที่เก็บข้อมูล + **กติกาทางธุรกิจทั้งหมด** | `TmsStore.cs` ← หัวใจ |
-| `Controllers/` | รับ request แล้วส่งต่อให้ `Data/` ไม่มีตรรกะของตัวเอง | `ManifestsController.cs` |
-| `Middleware/` | แปลง exception เป็น JSON ที่ client อ่านออก | `ErrorHandling.cs` |
-| `Services/` | ออก token ตอน login | `TokenService.cs` |
-
-### ทำไมกติกาไม่อยู่ใน Controller
-
-Controller มีหน้าที่แค่แกะ request แล้วส่งต่อ ส่วน "ยืนยันใบไม่ได้ถ้ายังไม่มีรถ"
-อยู่ใน `TmsStore` ที่เดียว ถ้ากระจายไว้ทั้งสองที่ วันหนึ่งมันจะไม่ตรงกัน
-แล้วไม่มีใครรู้ว่าอันไหนถูก
-
-### สามคำที่เจอบ่อยใน ASP.NET Core
-
-- **Controller** — คลาสที่ผูกกับ URL เช่น `[Route("manifests")]` คือทุก path ที่ขึ้นต้นด้วย `/manifests`
-- **DI (Dependency Injection)** — เขียน `ManifestsController(TmsStore store)` แล้ว framework
-  หา `TmsStore` มาส่งให้เอง เพราะลงทะเบียนไว้ใน `Program.cs` ด้วย `AddSingleton`
-- **Middleware** — ด่านที่ request ทุกอันต้องผ่าน เรียงตามลำดับที่เขียนใน `Program.cs`
-
----
-
-## กติกาที่ backend บังคับ
-
-กติกาพวกนี้ **ต้องอยู่ฝั่งเซิร์ฟเวอร์** ต่อให้ฝั่งจอปิดปุ่มไว้แล้วก็ตาม —
-ปุ่มที่กดไม่ได้เป็นความสุภาพ ไม่ใช่กฎ ใครยิง API ตรงก็ข้ามมันได้
-
-| กติกา | อยู่ที่ |
+| Path | Purpose |
 | --- | --- |
-| ใบสั่งส่งอยู่ได้ที่เดียว — คิว, ในแผน, หรือบนใบปิดบรรทุก ทุกก้าวคือ "ย้าย" | `TmsStore.GiveBack` / `TakeFromPool` |
-| ยืนยันไม่ได้ถ้ายังไม่มีรถ คนขับ และสายส่ง | `Manifest.IsAssigned()` |
-| แก้ไขได้ถึงสถานะ `confirmed` · ปิดเมื่อ `sent` | `AssertStatus` ใน `UpdateManifest` |
-| แยกใบ / ย้ายจุดส่ง เฉพาะ `draft` เพราะเขียนเอกสารสองใบพร้อมกัน | `SplitManifest` / `MoveStops` |
-| เปิดอินวอยซ์ได้เฉพาะหลังส่ง MMX แล้ว | `MarkInvoiced` |
-| `เสร็จสิ้น` / `ตีกลับ` มาจาก OMS เท่านั้น TMS ตั้งเองไม่ได้ | `ApplyExternalStatus` |
-| ยกเลิกไม่ต้องมีเหตุผล และช่องว่างไม่นับเป็นเหตุผล | `CancelManifest` |
-| ยกเลิกแผน/ใบ → ใบสั่งส่งเด้งกลับคิวทั้งหมด | `CancelPlan` / `CancelManifest` |
-| **สีเส้นทางเซิร์ฟเวอร์เป็นคนแจก** ไม่ใช่ client — และรักษาไว้ตอนแก้ไข | `CreateManifest` / `UpdateManifest` |
-| ค่าขนส่งคิดจาก `tripPrice + priceAdd - priceDeduct` ไม่รับตัวเลขที่ client พิมพ์มา | `FreightPricing.Total()` |
-| รหัสคลัง / โซน / สายส่ง / ผู้ให้บริการ / ทะเบียนรถ ห้ามซ้ำ | `Assert…Free` แต่ละตัว |
-| หนึ่งอำเภออยู่ได้โซนเดียว | `AssertAreasFree` |
-| secret ส่งกลับเป็น mask เสมอ ไม่เคยส่งค่าจริง | `IntegrationConfigStore` |
+| `Program.cs` | Service registration, CORS, auth, Swagger, middleware pipeline |
+| `Controllers/` | HTTP endpoints; controllers unpack requests and delegate work |
+| `Data/` | In-memory stores and business rules |
+| `Models/` | Response/domain shapes shared with the frontend contracts |
+| `Dtos/` | Request bodies accepted from clients |
+| `Middleware/` | Error handling and JSON error responses |
+| `Services/` | JWT key handling and token creation |
+| `tests/` | Python smoke tests and data generation helpers |
+| `docs/data-model/` | SQL Server data-model notes and local DB scripts |
 
----
+## Business Rules Enforced By The Backend
 
-## เรื่องที่ตั้งใจทำแบบนี้
+These rules live server-side because disabled frontend buttons are only a UI
+convenience. Direct API calls must still be rejected when they break the domain.
 
-**ทำไม error message เป็นภาษาไทย** — `apiClient.ts` ฝั่ง frontend อ่าน field `message`
-จาก body ก่อนจะไปใช้ข้อความสำรองจาก status code ข้อความที่เขียนที่นี่จึงไปโผล่หน้าจอตรง ๆ
-เหตุผลที่ปฏิเสธคำขอมีอยู่ที่เซิร์ฟเวอร์ที่เดียว ถ้าไม่เขียนให้อ่านรู้เรื่อง ผู้ใช้จะเห็นแค่ "คำขอไม่สำเร็จ (400)"
-
-**ทำไมไม่มี `UseHttpsRedirection`** — ตอน dev client วิ่ง http และการ redirect ไป https
-กลาง CORS preflight จะล้มเหลวแบบที่ดูเหมือนเซิร์ฟเวอร์ไม่ขึ้น ตอน deploy จริงเอา TLS มาไว้ข้างหน้า
-
-**ทำไม CORS ต้องระบุ origin ไม่ใช้ `*`** — เพราะเปิด `AllowCredentials` ไว้ให้ refresh cookie
-วิ่งได้ และ spec ไม่ยอมให้ใช้ wildcard คู่กับ credentials
-
-**ทำไม refresh token เป็น cookie ไม่ใช่ field ใน body** — `HttpOnly` ทำให้ JavaScript อ่านไม่ได้
-บั๊ก XSS จึงขโมย token อายุ 7 วันไปไม่ได้ ส่วน access token อายุสั้นอยู่ใน memory ของ client
-
-**ทำไม `[JsonIgnore(WhenWritingNull)]` ใส่บางฟิลด์เท่านั้น** — ฝั่ง TypeScript `field?:` (ไม่มีค่า)
-กับ `field: X | null` (มีค่าเป็น null) คนละความหมาย ตัวหลังเช่น `Warehouse.position`
-client เอาไปเทียบกับ `null` ตรง ๆ ถ้าตัดออกจาก JSON มันจะกลายเป็น `undefined` แล้วเข้าเงื่อนไขผิดข้าง
-
-**ทำไมตั้ง `UnsafeRelaxedJsonEscaping`** — ไม่งั้นภาษาไทยทุกตัวออกมาเป็น `เ` อ่านไม่ออก
-ทั้งใน network tab และใน log ซึ่งเป็นที่ที่ต้องเปิดดูตอนมีปัญหาพอดี ยังเป็น JSON ที่ถูกต้องเหมือนเดิม
-
----
-
-## ยังไม่ได้ทำ
-
-| เรื่อง | หมายเหตุ |
+| Rule | Main Location |
 | --- | --- |
-| **ฐานข้อมูล** | ยังเป็น in-memory · ดูหัวข้อถัดไป |
-| **ตรวจรหัสผ่าน** | `AuthController` รับอีเมลแล้วออก token ให้เลย ยังไม่มีตาราง users — ดู [checklist](#ก่อนเอาขึ้นเซิร์ฟเวอร์จริง) |
-| **จำกัดสิทธิ์ตาม role** | มี token = ทำได้ทุกอย่าง ยังไม่ได้แยกว่า `viewer` ทำอะไรได้บ้าง |
-| `/receipts` | เป็นของฝั่ง WMS (inbound) ไม่ใช่ TMS — จอนั้นยังวิ่งบน fixture เดิม จึงไม่ใส่ `receipts` ใน `VITE_API_LIVE` |
-| ยิงออกไป MMX จริง | `SendManifest` บันทึกลง log แต่ยังไม่ได้ call ออกไปข้างนอก |
-| รับ webhook จาก OMS | ตอนนี้ใช้ `POST /manifests/{id}/status` แทนไปก่อน |
+| A delivery stop can be in only one place: pending pool, plan, or manifest | `TmsStore` pool movement methods |
+| A manifest cannot be confirmed until truck, driver, and route are assigned | `Manifest.IsAssigned()` |
+| Manifests are editable only through `draft` and `confirmed`; `sent` locks them | `UpdateManifest` / `AssertStatus` |
+| Splitting and moving stops are allowed only for `draft` manifests | `SplitManifest` / `MoveStops` |
+| Invoicing is allowed only after the manifest has been sent or completed | `MarkInvoiced` |
+| Completion and error status come from OMS-style status updates, not manual TMS changes | `ApplyExternalStatus` |
+| Cancelling a plan or manifest returns its stops to the pending pool | `CancelPlan` / `CancelManifest` |
+| Route colours are assigned and preserved by the server | `CreateManifest` / `UpdateManifest` |
+| Freight cost is derived from `tripPrice + priceAdd - priceDeduct` | `FreightPricing.Total()` |
+| Master codes and vehicle plates must stay unique | `Assert...Free` methods |
+| One district can belong to only one delivery zone | `AssertAreasFree` |
+| Integration secrets are returned masked, never as raw stored values | `IntegrationConfigStore` |
 
-### ขั้นต่อไป: ต่อฐานข้อมูล
+## API Smoke Tests
 
-โครงสร้างฐานจริงกับส่วนที่ต้องแก้ก่อนต่อได้ อยู่ใน [`docs/data-model/`](docs/data-model/) —
-อ่าน [README ของโฟลเดอร์นั้น](docs/data-model/README.md) ก่อนเริ่ม โดยเฉพาะหัวข้อ 2
-เพราะตารางส่วนใหญ่ในฐานจริง**ยังไม่มี PRIMARY KEY** ซึ่ง EF Core จะ map เป็น
-keyless entity ที่เขียนกลับไม่ได้ ต้องรัน `02-alter-existing.sql` ส่วน A ก่อน
+Start the backend first:
 
-สร้างฐานสำหรับทดสอบในเครื่อง (SQL Server Express) ได้ด้วย:
+```powershell
+dotnet run
+```
+
+Then run:
+
+```powershell
+python tests/api_smoke.py
+```
+
+Optional base URL:
+
+```powershell
+python tests/api_smoke.py --base-url http://localhost:5081
+```
+
+The smoke test checks:
+
+- Login returns a usable access token.
+- `/auth/me` reads the token.
+- Seeded master endpoints return data.
+- Duplicate carrier codes are rejected.
+- A pending stop can move through plan, issue, assignment, confirm, send, and
+  OMS status update.
+
+Because the backend is in-memory, the transport lifecycle consumes seed stops.
+Restart `dotnet run` to reset the data.
+
+## Generate Development Data
+
+Preview generated delivery orders as JSON:
+
+```powershell
+python tests/generate_data.py delivery-orders --count 20
+```
+
+Post generated delivery orders into a running API:
+
+```powershell
+python tests/generate_data.py delivery-orders --count 20 --post
+```
+
+Generate transport master data as carrier, driver, and vehicle sets:
+
+```powershell
+python tests/generate_data.py fleet --count 3 --post
+```
+
+Generated rows are not persisted. They disappear when the API restarts.
+
+## Manual API Requests
+
+The REST Client `.http` file contains endpoint examples for VS Code.
+
+The usual flow is:
+
+1. `POST /auth/login`
+2. `GET /manifests/pending-stops`
+3. `POST /transport-plans`
+4. `PUT /transport-plans/{id}/stops`
+5. `POST /transport-plans/{id}/issue`
+6. `PUT /manifests/{id}` to assign truck, driver, and route
+7. `POST /manifests/{id}/confirm`
+8. `POST /manifests/{id}/send`
+9. `POST /manifests/{id}/status`
+
+## Configuration
+
+`appsettings.json` contains non-secret defaults:
+
+```jsonc
+{
+  "Jwt": { "Issuer": "...", "Audience": "..." },
+  "Cors": { "Origins": ["http://localhost:5700"] },
+  "Auth": { "RequireAuthentication": false }
+}
+```
+
+If the frontend port changes, add the new origin to `Cors:Origins`.
+
+### JWT Signing Key
+
+The JWT signing key is never committed.
+
+| Environment | Source |
+| --- | --- |
+| Development | Auto-generated on first run and stored in `.secrets/jwt-key` |
+| Production | Required environment variable: `Jwt__Key` |
+
+To generate a new key:
+
+```powershell
+node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
+```
+
+## Database Roadmap
+
+The API currently uses singleton in-memory stores. The SQL Server notes and local
+database scripts live in:
+
+```text
+docs/data-model/
+```
+
+Create a local development database:
 
 ```powershell
 cd docs\data-model
 .\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB"
 ```
 
-ได้ฐาน `MMDEV` ที่มี 59 ตาราง PK ครบทุกใบ ต่อได้ทั้งจาก VS Code (โปรไฟล์
-`MamMoD dev (MMDEV)` ตั้งไว้ใน `.vscode/settings.json` แล้ว) และจาก backend
-ผ่าน connection string ชื่อ `Mmdev` ใน `appsettings.Development.json`
-ทั้งคู่ใช้ Windows Authentication จึงไม่ต้องมี username/password
-รายละเอียด — รวมถึงเหตุผลที่ใช้ LocalDB แทน `.\SQLEXPRESS` — อยู่ใน
-[หัวข้อ 7 ของ data-model README](docs/data-model/README.md)
+The intended migration path is:
 
-ทำตามลำดับนี้ (ลอกรูปแบบจาก `KM_BE_Dev/OMS_KMTo/Database` ได้)
+1. Add EF Core packages: `Microsoft.EntityFrameworkCore.SqlServer` and
+   `Microsoft.EntityFrameworkCore.Design`.
+2. Create `Database/AppDbContext.cs`.
+3. Register the DbContext in `Program.cs`.
+4. Replace in-memory `List<T>` storage in the stores with EF-backed persistence.
+5. Wrap stop movement in database transactions so the "one place only" rule
+   remains correct under concurrent requests.
+6. Run migrations with `dotnet ef migrations add Initial` and
+   `dotnet ef database update`.
 
-1. `dotnet add package Microsoft.EntityFrameworkCore.SqlServer` และ `...EntityFrameworkCore.Design`
-2. สร้าง `Database/AppDbContext.cs` ที่มี `DbSet<Manifest>`, `DbSet<TransportPlan>` ฯลฯ
-3. ใน `Program.cs` เปลี่ยน `AddSingleton<TmsStore>()` เป็น `AddScoped` แล้วฉีด `AppDbContext` เข้าไป
-4. ใน `TmsStore` เปลี่ยน `List<T>` เป็น `DbSet<T>` และเอา `lock (_gate)` ออก
-   (ฐานข้อมูลจัดการ concurrency ให้แทน — แต่ต้องห่อ "ย้ายใบสั่งส่ง" ด้วย transaction
-   ไม่งั้นกติกา "อยู่ได้ที่เดียว" จะพังตอนมีคนใช้พร้อมกัน)
-5. `dotnet ef migrations add Initial` แล้ว `dotnet ef database update`
+The store methods should keep owning the business rules. Only the persistence
+mechanism should change.
 
-**เมธอดในคลาสไม่ต้องย้ายที่** — กติกาอยู่ที่เดิม เปลี่ยนแค่ที่เก็บ
+## Not Done Yet
 
----
-
-## ตั้งค่า
-
-`appsettings.json` มีเฉพาะค่าที่ไม่เป็นความลับ:
-
-```jsonc
-{
-  "Jwt":  { "Issuer": "...", "Audience": "..." },   // ไม่มี Key — ดูข้างล่าง
-  "Cors": { "Origins": ["http://localhost:5700"] },
-  "Auth": { "RequireAuthentication": false }        // ตอน dev เท่านั้น
-}
-```
-
-ถ้าเปลี่ยน port ของ frontend ต้องเพิ่ม origin ตรงนี้ด้วย ไม่งั้น browser จะบล็อกทุก request
-โดยขึ้น error ที่ดูเหมือนเซิร์ฟเวอร์ล่ม
-
-### กุญแจเซ็น JWT
-
-กุญแจตัวนี้เป็นสิ่งเดียวที่แยก "token ที่เซิร์ฟเวอร์ออกให้" ออกจาก "token ที่ใครก็ปลอมได้"
-ใครอ่านมันได้ก็เซ็น token เป็น admin เองได้ทันที **จึงไม่มีอยู่ในไฟล์ใด ๆ ที่ commit**
-
-| ตอนไหน | มาจากไหน |
+| Item | Note |
 | --- | --- |
-| dev | สร้างสุ่มอัตโนมัติครั้งแรกที่รัน เก็บไว้ที่ `.secrets/jwt-key` ซึ่ง gitignore ไว้แล้ว |
-| production | ต้องตั้ง env var `Jwt__Key` (ขีดล่าง **สอง** อัน) เอง **ถ้าไม่ตั้ง เซิร์ฟเวอร์จะไม่ยอมขึ้นเลย** |
+| Persistent database | Still in-memory |
+| Real password verification | Login currently trusts email only |
+| Role-level authorization | A valid token can currently call all endpoints |
+| `/receipts` live backend | This is WMS inbound scope and still fixture-backed |
+| Real MMX outbound integration | `SendManifest` writes an integration log only |
+| Real OMS webhook | `POST /manifests/{id}/status` stands in for now |
 
-สุ่มค่าใหม่:
+## Production Checklist
 
-```bash
-node -e "console.log(require('crypto').randomBytes(48).toString('base64'))"
-```
+Before deploying anywhere beyond a trusted local machine or LAN:
 
-ที่เลือกให้ล้มตั้งแต่ตอนเปิดเครื่อง แทนที่จะใส่ค่า default ไว้ให้ เพราะค่า default ที่อยู่ใน
-โค้ดสาธารณะไม่ต่างจากไม่มีกุญแจเลย และความผิดพลาดที่ดังตอน deploy ดีกว่าความผิดพลาดที่เงียบ
+- Add real user storage and BCrypt password verification.
+- Set a strong production `Jwt__Key`.
+- Serve through HTTPS.
+- Set `Cors:Origins` to the real frontend origins.
+- Ensure `ASPNETCORE_ENVIRONMENT` is not `Development`.
+- Add role-based `[Authorize]` policies.
+- Move data storage from memory to a database.
+- Store connection strings and secrets in environment variables or a secret
+  manager.
+- Add rate limiting to `/auth/login`.
+- Do not commit real customer data or real integration credentials.
 
----
+## Public Repo Rules
 
-## ก่อนเอาขึ้นเซิร์ฟเวอร์จริง
+- Anything committed should be treated as permanently exposed, even if removed
+  later.
+- If a real key is committed, revoke the key. Do not rely on deleting the file.
+- Keep fake secrets clearly fake, for example `EXAMPLE-NOT-A-REAL-SECRET`.
+- Do not place production DDL or vendor-owned database dumps in this repository.
 
-ตอนนี้รันได้แค่บนเครื่องตัวเอง ถ้าจะเอาขึ้นที่ที่คนอื่นเข้าถึงได้ ต้องทำครบทุกข้อนี้ก่อน
+## References
 
-- [ ] **ตรวจรหัสผ่านจริง** — ทำตาราง users แล้วเก็บรหัสด้วย BCrypt (`BCrypt.Net-Next`
-      ตัวเดียวกับที่ `KM_BE_Dev` ใช้) **ห้ามเก็บรหัสผ่านเป็นข้อความธรรมดาเด็ดขาด**
-      แก้ที่ `AuthController.Accounts` ที่เดียว
-- [ ] **ตั้ง `Jwt__Key`** เป็นค่าสุ่มยาว ๆ และอย่าใช้ค่าเดียวกับเครื่อง dev
-- [ ] **เปิด HTTPS** แล้วเอา TLS มาไว้ข้างหน้า — ตอนนี้ token วิ่งเป็น plain text
-      พอเป็น https แล้ว refresh cookie จะเปลี่ยนเป็น `Secure` + `SameSite=None` อัตโนมัติ
-- [ ] **แก้ `Cors:Origins`** ให้เป็นโดเมนจริงของ frontend อย่าใส่ `*` (ใส่ไม่ได้อยู่แล้ว
-      เพราะเปิด credentials ไว้ แต่อย่าพยายามหาทางเลี่ยง)
-- [ ] **ตรวจว่า `ASPNETCORE_ENVIRONMENT` ไม่ใช่ `Development`** — ไม่งั้น Swagger จะเปิด
-      โล่งและ endpoint จะไม่บังคับ token
-- [ ] **จำกัดสิทธิ์ตาม role** — ตอนนี้มี token คือทำได้ทุกอย่าง คนที่ role `viewer`
-      ก็ยกเลิกใบปิดบรรทุกได้ ต้องเติม `[Authorize(Roles = "...")]` ตามจอที่ frontend กั้นไว้
-- [ ] **เปลี่ยนที่เก็บเป็นฐานข้อมูล** และเก็บ connection string ใน env var ไม่ใช่ในไฟล์
-- [ ] **ใส่ rate limit ที่ `/auth/login`** ไม่งั้นเดารหัสผ่านได้ไม่จำกัดรอบ
+- `docs/data-model/` - SQL Server schema notes, scripts, and ER diagrams
+- The REST Client `.http` file - manual endpoint examples
+- Frontend `src/features/*/api/*.mock.ts` - source fixture behavior mirrored by
+  this backend
 
-### กติกาสำหรับ repo สาธารณะ
-
-- อะไรที่ commit ไปแล้ว **ถือว่าหลุดถาวร** ต่อให้ลบทีหลังก็ยังอยู่ใน git history
-  ถ้าเผลอ commit key จริงลงไป วิธีแก้คือ**ไปเพิกถอน key ตัวนั้น** ไม่ใช่ลบ commit
-- ค่าที่หน้าตาเหมือน secret ในโค้ดนี้ (`EXAMPLE-NOT-A-REAL-SECRET-…`) ตั้งชื่อให้อ่านแล้ว
-  รู้ทันทีว่าปลอม — ถ้าจะเพิ่มค่าสมมติใหม่ ตั้งชื่อแนวเดียวกัน
-- อย่าใส่ข้อมูลลูกค้าจริงลง `Data/Seed.cs` หรือ `Mammod_BackEnd.http`
-
----
-
-## เอกสารอ้างอิง
-
-- [`docs/data-model/`](docs/data-model/) — โครงสร้างฐานจริง (`MMPRD`) · ตารางที่ต้องเพิ่ม ·
-  สคริปต์แก้ตารางเดิม · ไดอะแกรม ER สองฝั่ง (ขนส่ง / คลัง)
-- `docs/tms-sequence.md` ในโปรเจค frontend — ลำดับงานทั้งหมดและตารางว่า endpoint ไหนทำอะไร
-- `src/features/*/api/*.mock.ts` ในโปรเจค frontend — โค้ดต้นทางที่ backend นี้แปลงมา

@@ -9,15 +9,20 @@
       2. <schema>                    DDL ของฐานจริง (ไม่ได้อยู่ใน repo ดู -SchemaFile)
       3. 01-new-tables.sql           ตารางที่ยังไม่มีในฐาน
       4. 02-alter-existing.sql       PK/ชนิดข้อมูล/FK/ดัชนีที่ต้องแก้
+      5. 03-seed-demo-data.sql       ข้อมูลตัวอย่าง — เฉพาะเมื่อใส่ -Seed
+
+.PARAMETER Seed
+    ใส่ข้อมูลตัวอย่างต่อท้ายด้วย ไฟล์ 03 สร้างจาก tests/generate_sql_data.py
+    ถ้ายังไม่มีไฟล์ สคริปต์จะบอกวิธีสร้างแล้วจบแบบปกติ ไม่ล้ม
 
     **ลบฐานเดิมทิ้งทุกครั้ง** ตั้งใจให้เป็นแบบนั้น เพราะฐานนี้มีไว้ทดสอบว่า
     สคริปต์รันผ่านบนของเปล่า ไม่ใช่ที่เก็บข้อมูลที่ต้องรักษา — อย่าชี้ไปฐานที่มี
     ข้อมูลจริง สคริปต์จะถามยืนยันถ้าฐานปลายทางมีข้อมูลอยู่
 
 .PARAMETER SchemaFile
-    พาธของ DDL ฐานจริง (MAMMOD_TABLE2_R03.sql) ซึ่ง **ไม่ได้อยู่ใน repo**
-    เพราะเป็นโครงสร้างฐาน production ของลูกค้า ค่าเริ่มต้นมองหาที่
-    docs/data-model/vendor/ ซึ่ง gitignore ไว้แล้ว
+    พาธของ DDL ฐานจริง (`*_TABLE2_R03.sql`) ซึ่ง **ไม่ได้อยู่ใน repo**
+    เพราะเป็นโครงสร้างฐาน production ของลูกค้า ถ้าไม่ระบุ จะมองหาไฟล์
+    `*TABLE2*.sql` ในโฟลเดอร์ docs/data-model/vendor/ ซึ่ง gitignore ไว้แล้ว
 
 .EXAMPLE
     .\build-local-db.ps1
@@ -27,8 +32,9 @@
 param(
     [string] $Server     = '.\SQLEXPRESS',
     [string] $Database   = 'MMDEV',
-    [string] $SchemaFile = "$PSScriptRoot\vendor\MAMMOD_TABLE2_R03.sql",
-    [switch] $Force
+    [string] $SchemaFile = '',
+    [switch] $Force,
+    [switch] $Seed
 )
 
 $ErrorActionPreference = 'Stop'
@@ -52,6 +58,25 @@ function Invoke-SqlFile {
 
 if (-not (Get-Command sqlcmd -ErrorAction SilentlyContinue)) {
     throw 'ไม่พบ sqlcmd — ติดตั้ง "SQL Server Command Line Utilities" หรือ SQL Server Management Studio ก่อน'
+}
+
+# ไฟล์ DDL ถูกส่งมาหลายชื่อแล้วแต่รอบที่ export ออกจากฐาน (และเอกสารก็เรียกชื่อ
+# ไม่ตรงกับที่อยู่บนดิสก์อยู่พักหนึ่ง) จึงรับทุก *_TABLE2_*.sql ในโฟลเดอร์ vendor
+# แทนที่จะยึดชื่อเดียว — ถ้าเจอมากกว่าหนึ่งไฟล์ให้เลือกเอง อย่าให้สคริปต์เดา
+if (-not $SchemaFile) {
+    $found = @(Get-ChildItem "$PSScriptRoot\vendor" -Filter '*TABLE2*.sql' -ErrorAction SilentlyContinue |
+               Sort-Object Name -Descending)
+    if ($found.Count -eq 1) {
+        $SchemaFile = $found[0].FullName
+    }
+    elseif ($found.Count -gt 1) {
+        $SchemaFile = $found[0].FullName
+        Write-Host "พบ DDL หลายไฟล์ ใช้ตัวใหม่สุด: $($found[0].Name)" -ForegroundColor Yellow
+        Write-Host "  (ระบุเองด้วย -SchemaFile ถ้าต้องการไฟล์อื่น: $($found.Name -join ', '))" -ForegroundColor DarkGray
+    }
+    else {
+        $SchemaFile = "$PSScriptRoot\vendor\PROJECT_TABLE2_R03.sql"   # ให้ข้อความ error ข้างล่างมีชื่อไฟล์ที่คาดหวัง
+    }
 }
 
 if (-not (Test-Path $SchemaFile)) {
@@ -92,6 +117,20 @@ Invoke-SqlFile "$PSScriptRoot\00-user-defined-types.sql" $Database
 Invoke-SqlFile $SchemaFile                               $Database
 Invoke-SqlFile "$PSScriptRoot\01-new-tables.sql"         $Database
 Invoke-SqlFile "$PSScriptRoot\02-alter-existing.sql"     $Database
+
+# ข้อมูลตัวอย่างเป็นทางเลือก ไม่ใช่ค่าเริ่มต้น — ฐานเปล่ากับฐานที่มีข้อมูลตอบ
+# คำถามคนละข้อ ("สคริปต์รันผ่านไหม" กับ "จอมีอะไรแสดงไหม") ปนกันแล้วเวลาอะไรพัง
+# จะแยกไม่ออกว่าพังเพราะโครงสร้างหรือเพราะข้อมูล
+if ($Seed) {
+    $seedFile = "$PSScriptRoot\03-seed-demo-data.sql"
+    if (Test-Path $seedFile) {
+        Invoke-SqlFile $seedFile $Database
+    }
+    else {
+        Write-Host "  ยังไม่มี 03-seed-demo-data.sql — สร้างด้วย" -ForegroundColor Yellow
+        Write-Host "    py -3 tests\generate_sql_data.py" -ForegroundColor Yellow
+    }
+}
 
 Write-Host "`nเสร็จแล้ว" -ForegroundColor Green
 & sqlcmd -S $Server -E -C -d $Database -h -1 -W -Q @"

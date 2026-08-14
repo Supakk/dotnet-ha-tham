@@ -1,9 +1,9 @@
-# โมเดลข้อมูล MamMoD — สิ่งที่ต้องเพิ่มและแก้
+﻿# โมเดลข้อมูลโปรเจค — สิ่งที่ต้องเพิ่มและแก้
 
-เทียบ **schema จริง** (`MAMMOD_TABLE2_R03.sql`, ฐาน `MMDEV`) กับไดอะแกรม ER
+เทียบ **schema จริง** (`PROJECT_TABLE2_R03.sql`, ฐาน `MMDEV`) กับไดอะแกรม ER
 และกับ data model ที่หน้าจอใช้จริงใน `src/features`
 
-> สำเนามาจาก repo ฝั่ง frontend (`Mammod_FrontEnd/docs/data-model`) เพื่อให้
+> สำเนามาจาก repo ฝั่ง frontend ของโปรเจค เพื่อให้
 > backend ที่จะต่อฐานจริงอ่านได้จากที่เดียวกับโค้ด · path ที่อ้างถึง `src/…`
 > ในเอกสารนี้หมายถึง repo ฝั่ง frontend ไม่ใช่ repo นี้ · **ในนี้ไม่มีข้อมูลจริง
 > ไม่มี connection string และไม่มีรหัสผ่าน** มีแต่โครงสร้างตารางกับ query
@@ -15,9 +15,10 @@
 | [`00-user-defined-types.sql`](./00-user-defined-types.sql) | UDT 21 ตัวที่ script ฐานอ้างถึงแต่ไม่ได้แนบมา — ไม่มีอันนี้ สร้างฐานเปล่าไม่ได้เลย |
 | [`01-new-tables.sql`](./01-new-tables.sql) | **10 ตารางใหม่** ตามธรรมเนียมของฐานจริง |
 | [`02-alter-existing.sql`](./02-alter-existing.sql) | ชนิดข้อมูลที่ต้องอุดก่อน · PK ที่หายไป · float→decimal · คอลัมน์ที่ขาด · FK · ดัชนี · rowversion |
-| [`build-local-db.ps1`](./build-local-db.ps1) | รันทั้งสี่ไฟล์ตามลำดับ สร้างฐาน `MMDEV` ในเครื่องขึ้นใหม่ทั้งใบ |
+| [`03-seed-demo-data.sql`](./03-seed-demo-data.sql) | ข้อมูลตัวอย่าง **สร้างอัตโนมัติ ห้ามแก้ด้วยมือ** — ที่มาคือ [`tests/generate_sql_data.py`](../../tests/generate_sql_data.py) |
+| [`build-local-db.ps1`](./build-local-db.ps1) | รันทุกไฟล์ตามลำดับ สร้างฐาน `MMDEV` ในเครื่องขึ้นใหม่ทั้งใบ (`-Seed` เพื่อใส่ข้อมูลตัวอย่างด้วย) |
 
-> **อัปเดต R02 → R03** เอกสารนี้เขียนครั้งแรกจาก `MAMMOD_TABLE2_R02.sql`
+> **อัปเดต R02 → R03** เอกสารนี้เขียนครั้งแรกจาก `PROJECT_TABLE2_R02.sql`
 > R03 เพิ่มสองตาราง (`MST_TRANSPORTATIONZONE`, `TRX_TODODETAIL`) กับคอลัมน์
 > `MST_SHIPTO.TRANSPORTZONEKEY` → ข้อเสนอเรื่องโซนจัดส่งถูกปรับตามแล้ว
 > ดูหัวข้อ 3 · ที่เหลือของ R02 ยังเหมือนเดิมทุกตาราง
@@ -66,7 +67,7 @@
 `TRX_INVENTORYHOLDCODE` `TRX_TODODETAIL` `DOC_PO` `DOC_PODETAIL`
 `DOC_DO_PICKDETAIL` `MST_TRANSPORTER_ROUTE` `MST_TRANSPORTER_DOCUMENT` `MST_WHSE`
 
-→ **ห้ามใช้ไดอะแกรมเป็นแหล่งอ้างอิงโครงสร้าง** ใช้ `MAMMOD_TABLE2_R03.sql`
+→ **ห้ามใช้ไดอะแกรมเป็นแหล่งอ้างอิงโครงสร้าง** ใช้ `PROJECT_TABLE2_R03.sql`
 หรือฐานที่สร้างจากหัวข้อ 7 แล้ว query `sys.tables` เอา
 
 ## 1 · ข้อสรุปที่ถอนคืน (ไดอะแกรมไม่ตรงกับฐาน)
@@ -197,7 +198,7 @@ FK ชี้มาไม่ได้, และ EF Core ต้อง map เป�
 
 ### 2.8 คอลัมน์ที่อ้างถึงตารางที่ไม่มีอยู่ในฐาน
 
-`MAMMOD_TABLE2_R02.sql` คือฐานทั้งหมด ไม่ใช่บางส่วน — คอลัมน์เหล่านี้จึงชี้ไป
+`PROJECT_TABLE2_R02.sql` คือฐานทั้งหมด ไม่ใช่บางส่วน — คอลัมน์เหล่านี้จึงชี้ไป
 ที่ว่างเปล่าจริง ๆ ไม่ใช่ชี้ไปตารางที่อยู่ในไฟล์อื่น
 
 | คอลัมน์ | อ้างถึง | ผล |
@@ -360,16 +361,24 @@ constraint ครอบได้เท่าที่ประกาศได้
 **ไม่ใช่สำเนาข้อมูล production** ที่สร้างขึ้นจะเป็นตารางเปล่าทั้งหมด
 
 ต้องมีก่อน: SQL Server (Express ก็พอ) · `sqlcmd` · ไฟล์ DDL ของฐานจริง
-`MAMMOD_TABLE2_R03.sql` ซึ่ง **ไม่ได้อยู่ใน repo** เพราะเป็นโครงสร้างฐาน
+`PROJECT_TABLE2_R03.sql` ซึ่ง **ไม่ได้อยู่ใน repo** เพราะเป็นโครงสร้างฐาน
 production ของลูกค้า — ขอจากทีมที่ดูแลฐาน แล้ววางไว้ที่
 `docs/data-model/vendor/` (โฟลเดอร์นั้น gitignore ไว้แล้ว)
 
 ```powershell
 cd docs\data-model
 .\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB"
+# ใส่ข้อมูลตัวอย่างต่อท้ายด้วย
+.\build-local-db.ps1 -Server "(localdb)\MSSQLLocalDB" -Seed
 # หรือชี้ไฟล์เอง / เปลี่ยนปลายทาง
-.\build-local-db.ps1 -Server ".\SQLEXPRESS" -Database MMDEV -SchemaFile "$HOME\Downloads\MAMMOD_TABLE2_R03.sql"
+.\build-local-db.ps1 -Server ".\SQLEXPRESS" -Database MMDEV -SchemaFile "$HOME\Downloads\PROJECT_TABLE2_R03.sql"
 ```
+
+ข้อมูลตัวอย่างเป็นทางเลือก ไม่ใช่ค่าเริ่มต้น — ฐานเปล่ากับฐานที่มีข้อมูลตอบคำถาม
+คนละข้อ ("สคริปต์รันผ่านไหม" กับ "จอมีอะไรแสดงไหม") ปนกันแล้วเวลาอะไรพังจะแยก
+ไม่ออกว่าพังเพราะโครงสร้างหรือเพราะข้อมูล · `-Seed` ใส่ **316 แถวใน 22 ตาราง**
+สร้างจาก [`tests/generate_sql_data.py`](../../tests/generate_sql_data.py)
+รายละเอียดอยู่ใน [`tests/README.md`](../../tests/README.md)
 
 สคริปต์ **ลบฐานปลายทางทิ้งก่อนเสมอ** และจะถามยืนยันถ้าฐานนั้นมีข้อมูลอยู่
 ผลลัพธ์ที่ถูกต้อง:
@@ -389,7 +398,7 @@ tables without a primary key: none
 
 | จากไหน | ตั้งไว้ที่ | วิธี |
 | --- | --- | --- |
-| VS Code | user settings (ดูกล่องข้างล่าง) | `Ctrl+Shift+P` → `MS SQL: Connect` → เลือก `MamMoD dev (MMDEV)` |
+| VS Code | user settings (ดูกล่องข้างล่าง) | `Ctrl+Shift+P` → `MS SQL: Connect` → เลือก `โปรเจค dev (MMDEV)` |
 | backend | [`appsettings.Development.json`](../../appsettings.Development.json) | connection string ชื่อ `Mmdev` |
 
 > **โปรไฟล์ของส่วนขยายต้องอยู่ใน user settings ไม่ใช่ `.vscode/settings.json`**
@@ -402,7 +411,7 @@ tables without a primary key: none
 > ```json
 > "mssql.connections": [
 >   {
->     "profileName": "MamMoD dev (MMDEV)",
+>     "profileName": "โปรเจค dev (MMDEV)",
 >     "server": "(localdb)\\MSSQLLocalDB",
 >     "database": "MMDEV",
 >     "authenticationType": "Integrated",
@@ -444,7 +453,9 @@ SQLEXPRESS` → `TCP/IP` → Enable → แล้ว `Restart-Service 'MSSQL$SQL
 
 ---
 
-อ้างอิง (ทั้งหมดอยู่ใน repo ฝั่ง frontend): `MAMMOD_TABLE2_R03.sql` (ฐาน MMDEV) ·
+อ้างอิง (ทั้งหมดอยู่ใน repo ฝั่ง frontend): `PROJECT_TABLE2_R03.sql` (ฐาน MMDEV) ·
 `src/features/logistics/types` ·
 กฎที่ mock บังคับ: `src/features/logistics/api/manifests.mock.ts` ·
 ลำดับการทำงาน: `docs/tms-sequence.md`
+
+
