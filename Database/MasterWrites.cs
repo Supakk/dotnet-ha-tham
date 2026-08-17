@@ -388,6 +388,14 @@ public sealed partial class MasterQueries
 
     private static void AddRouteZones(AppDbContext db, string route, RouteMaster input)
     {
+        // Exactly one primary, always — a unique filtered index refuses two, and
+        // a route with zones but none marked would leave every report that groups
+        // by primary zone silently dropping it. An unrecognised choice falls back
+        // to the first zone rather than being written as given.
+        var primary = input.DeliveryZoneIds.Contains(input.PrimaryZoneId)
+            ? input.PrimaryZoneId
+            : input.DeliveryZoneIds.FirstOrDefault() ?? "";
+
         var sequence = 1;
         foreach (var zoneId in input.DeliveryZoneIds)
         {
@@ -398,6 +406,7 @@ public sealed partial class MasterQueries
                 OwnerKey = SeedOwner,
                 ZoneKey = Key(zoneId, "zone-"),
                 Sequence = sequence++,
+                IsPrimary = zoneId == primary,
                 Status = "ACTIVE",
                 AddDate = DateTime.Now,
             });

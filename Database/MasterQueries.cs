@@ -116,11 +116,17 @@ public sealed partial class MasterQueries(
         return FromDb(db =>
         {
             var routes = db.Routes.OrderBy(r => r.Route).ToList();
-            var zonesByRoute = db.RouteZones
-                .OrderBy(rz => rz.Sequence)
-                .ToList()
+            var routeZones = db.RouteZones.OrderBy(rz => rz.Sequence).ToList();
+            var zonesByRoute = routeZones
                 .GroupBy(rz => rz.Route)
                 .ToDictionary(g => g.Key, g => g.Select(rz => $"zone-{rz.ZoneKey}").ToList());
+            // The flag is what the route master says; falling back to the first
+            // zone keeps a route imported before the column existed usable.
+            var primaryByRoute = routeZones
+                .GroupBy(rz => rz.Route)
+                .ToDictionary(
+                    g => g.Key,
+                    g => $"zone-{(g.FirstOrDefault(rz => rz.IsPrimary) ?? g.First()).ZoneKey}");
             var whseNames = db.Warehouses
                 .Where(w => w.WhseId != null)
                 .ToList()
@@ -132,6 +138,7 @@ public sealed partial class MasterQueries(
                 Code = r.Route,
                 Name = r.Name,
                 DeliveryZoneIds = zonesByRoute.GetValueOrDefault(r.Route, []),
+                PrimaryZoneId = primaryByRoute.GetValueOrDefault(r.Route, ""),
                 // MST_WHSE holds no coordinates, so the origin has a name and an
                 // empty position. GeoPoint.Position is non-nullable, and an empty
                 // array is the honest reading — "no coordinates recorded" — where

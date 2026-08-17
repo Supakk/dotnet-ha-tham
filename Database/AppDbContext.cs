@@ -120,6 +120,7 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
             e.Property(x => x.OwnerKey).HasColumnName("OWNERKEY");
             e.Property(x => x.ZoneKey).HasColumnName("TRANSPORTZONEKEY");
             e.Property(x => x.Sequence).HasColumnName("SEQUENCE");
+            e.Property(x => x.IsPrimary).HasColumnName("IS_PRIMARY");
             e.Property(x => x.Status).HasColumnName("STATUS");
             e.Property(x => x.AddDate).HasColumnName("ADDDATE");
         });
@@ -284,6 +285,11 @@ public sealed class RouteZoneRow
     public string OwnerKey { get; set; } = "";
     public string ZoneKey { get; set; } = "";
     public int Sequence { get; set; }
+    /// <summary>
+    /// The zone the run is <i>for</i>, as opposed to the ones it calls at on the
+    /// way. A unique filtered index allows only one per route.
+    /// </summary>
+    public bool IsPrimary { get; set; }
     public string Status { get; set; } = "";
     public DateTime AddDate { get; set; }
 }

@@ -53,8 +53,20 @@ public sealed record RouteMaster
     /// <summary>Running code shown on documents, e.g. RT-NORTH-01.</summary>
     public required string Code { get; init; }
     public required string Name { get; init; }
-    /// <summary>Zones this route covers — the link back to the territory master.</summary>
+    /// <summary>
+    /// Zones this route covers, in the order the lorry passes through them —
+    /// the link back to the territory master, and what a plan's order pool is
+    /// narrowed to.
+    /// </summary>
     public List<string> DeliveryZoneIds { get; init; } = [];
+
+    /// <summary>
+    /// Which of them the run is <i>for</i>. The northern run is the Phitsanulok
+    /// run even though it calls at Nakhon Sawan and Phichit on the way, and that
+    /// is the zone a report groups it under. Empty only on a route with no zones
+    /// yet; otherwise the first is taken as primary.
+    /// </summary>
+    public string PrimaryZoneId { get; init; } = "";
     /// <summary>DC the run starts from, pre-filled onto every manifest built from it.</summary>
     public required GeoPoint DefaultOrigin { get; init; }
     public string Colour { get; init; } = "";

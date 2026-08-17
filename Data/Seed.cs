@@ -356,10 +356,12 @@ public static class Seed
 
     public static List<RouteMaster> Routes() =>
     [
-        // พิจิตร sits between the two the name gives, so the run passes through it.
-        new() { Id = "rt-1", Code = "RT-NORTH-01", Name = "สายเหนือ (นครสวรรค์ - พิษณุโลก)", DeliveryZoneIds = ["zone-1", "zone-2", "zone-3"], DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
-        new() { Id = "rt-2", Code = "RT-EAST-01", Name = "สายตะวันออก (ชลบุรี - ระยอง)", DeliveryZoneIds = ["zone-7", "zone-8"], DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = true },
-        new() { Id = "rt-3", Code = "RT-WEST-02", Name = "สายตะวันตก (นครปฐม - ราชบุรี)", DeliveryZoneIds = ["zone-9", "zone-10"], DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
+        // พิจิตร sits between the two the name gives, so the run passes through
+        // it. The primary zone is the one the run is bound for — the last it
+        // calls at — not the first it happens to pass.
+        new() { Id = "rt-1", Code = "RT-NORTH-01", Name = "สายเหนือ (นครสวรรค์ - พิษณุโลก)", DeliveryZoneIds = ["zone-1", "zone-2", "zone-3"], PrimaryZoneId = "zone-3", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
+        new() { Id = "rt-2", Code = "RT-EAST-01", Name = "สายตะวันออก (ชลบุรี - ระยอง)", DeliveryZoneIds = ["zone-7", "zone-8"], PrimaryZoneId = "zone-8", DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = true },
+        new() { Id = "rt-3", Code = "RT-WEST-02", Name = "สายตะวันตก (นครปฐม - ราชบุรี)", DeliveryZoneIds = ["zone-9", "zone-10"], PrimaryZoneId = "zone-10", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
         new() { Id = "rt-4", Code = "RT-SOUTH-01", Name = "สายใต้ (เพชรบุรี - ประจวบฯ)", DeliveryZoneIds = [], DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = false },
     ];
 

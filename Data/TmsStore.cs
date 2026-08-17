@@ -718,7 +718,7 @@ public sealed class TmsStore
         lock (_gate)
         {
             AssertRouteCodeFree(input.Code, null);
-            var created = input with { Id = $"rt-{_nextRoute++}" };
+            var created = WithPrimaryZone(input) with { Id = $"rt-{_nextRoute++}" };
             _routes = [.. _routes, created];
             return created;
         }
@@ -730,11 +730,23 @@ public sealed class TmsStore
         {
             if (!_routes.Any(r => r.Id == id)) throw DomainException.NotFound("ไม่พบสายส่งนี้");
             AssertRouteCodeFree(input.Code, id);
-            var updated = input with { Id = id };
+            var updated = WithPrimaryZone(input) with { Id = id };
             _routes = [.. _routes.Select(r => r.Id == id ? updated : r)];
             return updated;
         }
     }
+
+    /// <summary>
+    /// A route with zones always has exactly one primary, mirroring the unique
+    /// filtered index the table carries. A choice that is not one of the route's
+    /// own zones falls back to the first rather than being stored as given.
+    /// </summary>
+    private static RouteMaster WithPrimaryZone(RouteMaster input) => input with
+    {
+        PrimaryZoneId = input.DeliveryZoneIds.Contains(input.PrimaryZoneId)
+            ? input.PrimaryZoneId
+            : input.DeliveryZoneIds.FirstOrDefault() ?? "",
+    };
 
     private void AssertRouteCodeFree(string code, string? exceptId)
     {
