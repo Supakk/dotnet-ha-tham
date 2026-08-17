@@ -181,6 +181,12 @@ CREATE TABLE [dbo].[MST_ROUTE_ZONE](
     [OWNERKEY]         [nvarchar](20) NOT NULL,
     [TRANSPORTZONEKEY] [nvarchar](20) NOT NULL,
     [SEQUENCE]     [int]          NOT NULL,
+    /* โซนหลักของสายส่ง — สายหนึ่งมีได้โซนเดียว บังคับด้วย UX_MST_ROUTE_ZONE_PRIMARY
+       ข้างล่าง · คนละเรื่องกับ MST_TRANSPORTATIONZONE.DEFAULTROUTE ซึ่งตอบคำถาม
+       กลับด้าน ("โซนนี้ปกติวิ่งสายไหน") อันนั้นมองจากพื้นที่ อันนี้มองจากเส้นทาง
+       สายเหนือผ่านนครสวรรค์ พิจิตร พิษณุโลก แต่ถูกตั้งขึ้นเพื่อพิจิตร — โซนหลัก
+       คือสิ่งที่บอกแบบนั้นได้ และเป็นค่าที่ใช้ตั้งชื่อ จัดกลุ่ม และรายงาน */
+    [IS_PRIMARY]   [bit]          NOT NULL,
     [STATUS]       [nvarchar](10) NOT NULL,
     [ADDDATE]      [datetime]      NOT NULL,
     [ADDWHO]       [nvarchar](100) NULL,
@@ -192,6 +198,8 @@ CREATE TABLE [dbo].[MST_ROUTE_ZONE](
 GO
 
 ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_SEQ]     DEFAULT ((1))      FOR [SEQUENCE]
+GO
+ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_PRIMARY] DEFAULT ((0)) FOR [IS_PRIMARY]
 GO
 ALTER TABLE [dbo].[MST_ROUTE_ZONE] ADD CONSTRAINT [DF_MST_ROUTE_ZONE_STATUS]  DEFAULT ('ACTIVE') FOR [STATUS]
 GO
@@ -209,6 +217,14 @@ GO
 /* à¸¥à¸³à¸”à¸±à¸šà¸à¸²à¸£à¸§à¸´à¹ˆà¸‡à¸«à¹‰à¸²à¸¡à¸‹à¹‰à¸³à¹ƒà¸™à¸ªà¸²à¸¢à¹€à¸”à¸µà¸¢à¸§à¸à¸±à¸™ â€” à¹„à¸¡à¹ˆà¸‡à¸±à¹‰à¸™à¹„à¸¡à¹ˆà¸£à¸¹à¹‰à¸§à¹ˆà¸²à¹‚à¸‹à¸™à¹„à¸«à¸™à¸à¹ˆà¸­à¸™ */
 CREATE UNIQUE INDEX [UX_MST_ROUTE_ZONE_SEQ]
     ON [dbo].[MST_ROUTE_ZONE] ([ROUTE], [SEQUENCE])
+GO
+
+/* สายส่งหนึ่งสายมีโซนหลักได้โซนเดียว — filtered index ปล่อยให้แถวที่ IS_PRIMARY = 0
+   ซ้ำได้ตามปกติ แต่กันไม่ให้มีสองโซนอ้างว่าเป็นโซนหลักของสายเดียวกัน
+   (ไม่ได้บังคับว่า *ต้องมี* โซนหลัก เพราะสายที่ยังไม่ได้ผูกโซนเลยก็ต้องสร้างได้
+   ตัวที่บังคับว่าต้องเลือกคือหน้าจอกับ backend ตอนบันทึกสายที่มีโซนแล้ว) */
+CREATE UNIQUE INDEX [UX_MST_ROUTE_ZONE_PRIMARY]
+    ON [dbo].[MST_ROUTE_ZONE] ([ROUTE]) WHERE [IS_PRIMARY] = 1
 GO
 
 /* -----------------------------------------------------------------------------

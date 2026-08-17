@@ -123,12 +123,18 @@ ZONES = [
     ("TH-010", "โซนราชบุรี", "ราชบุรี", ["อำเภอเมืองราชบุรี", "อำเภอบ้านโป่ง", "อำเภอโพธาราม", "อำเภอดำเนินสะดวก", "อำเภอบางแพ"], 14300),
 ]
 
-# route, name, origin warehouse, zones in running order, colour, active
+# route, name, origin warehouse, zones in running order, primary zone, colour, active
+#
+# The primary zone is the one the route exists for, which is not always the first
+# it passes through: the northern run is set up for Phitsanulok at the far end,
+# and calls at Nakhon Sawan and Phichit on the way. That distinction is the whole
+# point of storing it — "which zone is this route" cannot be answered by taking
+# the first stop.
 ROUTES = [
-    ("RT-NORTH-01", "สายเหนือ (นครสวรรค์ - พิษณุโลก)", "WNB", ["TH-001", "TH-002", "TH-003"], "#2563eb", "ACTIVE"),
-    ("RT-EAST-01", "สายตะวันออก (ชลบุรี - ระยอง)", "WBN", ["TH-007", "TH-008"], "#16a34a", "ACTIVE"),
-    ("RT-WEST-02", "สายตะวันตก (นครปฐม - ราชบุรี)", "WNB", ["TH-009", "TH-010"], "#ea580c", "ACTIVE"),
-    ("RT-SOUTH-01", "สายใต้ (เพชรบุรี - ประจวบฯ)", "WBN", [], "#9333ea", "INACTIVE"),
+    ("RT-NORTH-01", "สายเหนือ (นครสวรรค์ - พิษณุโลก)", "WNB", ["TH-001", "TH-002", "TH-003"], "TH-003", "#2563eb", "ACTIVE"),
+    ("RT-EAST-01", "สายตะวันออก (ชลบุรี - ระยอง)", "WBN", ["TH-007", "TH-008"], "TH-008", "#16a34a", "ACTIVE"),
+    ("RT-WEST-02", "สายตะวันตก (นครปฐม - ราชบุรี)", "WNB", ["TH-009", "TH-010"], "TH-010", "#ea580c", "ACTIVE"),
+    ("RT-SOUTH-01", "สายใต้ (เพชรบุรี - ประจวบฯ)", "WBN", [], None, "#9333ea", "INACTIVE"),
 ]
 
 # key, name, type, contact, phone, email, tax id, status
@@ -544,11 +550,11 @@ PRINT 'clearing previous demo rows';
          ["ROUTE", "WHSEID", "ROUTENAME", "ORIGIN_WHSEID", "COLOURHEX", "TRANSIT_DAY",
           "STATUS", "ADDDATE", "ADDWHO"],
          [(route, WHSE, name, origin, colour, 1 + i % 2, status, now, "seed")
-          for i, (route, name, origin, _zones, colour, status) in enumerate(ROUTES)])
+          for i, (route, name, origin, _zones, _primary, colour, status) in enumerate(ROUTES)])
 
     # ── MST_TRANSPORTATIONZONE ──────────────────────────────────────────────
     # DEFAULTROUTE is the zone's main run; MST_ROUTE_ZONE below carries the rest.
-    default_route = {z: r for r, _n, _o, zones, _c, _s in ROUTES for z in zones}
+    default_route = {z: r for r, _n, _o, zones, _p, _c, _s in ROUTES for z in zones}
     emit("MST_TRANSPORTATIONZONE",
          ["WHSEID", "OWNERKEY", "TRANSPORTZONEKEY", "TRANSPORTZONENAME", "COUNTRY",
           "PROVINCE", "DELIVERYLEADDAY", "DEFAULTROUTE", "PRIORITY",
@@ -568,9 +574,9 @@ PRINT 'clearing previous demo rows';
     # ── MST_ROUTE_ZONE ──────────────────────────────────────────────────────
     emit("MST_ROUTE_ZONE",
          ["ROUTE", "WHSEID", "OWNERKEY", "TRANSPORTZONEKEY", "SEQUENCE",
-          "STATUS", "ADDDATE", "ADDWHO"],
-         [(route, WHSE, OWNER20, zone, seq, "ACTIVE", now, "seed")
-          for route, _n, _o, zones, _c, _s in ROUTES
+          "IS_PRIMARY", "STATUS", "ADDDATE", "ADDWHO"],
+         [(route, WHSE, OWNER20, zone, seq, zone == primary, "ACTIVE", now, "seed")
+          for route, _n, _o, zones, primary, _c, _s in ROUTES
           for seq, zone in enumerate(zones, start=1)])
 
     # ── MST_TRANSPORTER ─────────────────────────────────────────────────────
