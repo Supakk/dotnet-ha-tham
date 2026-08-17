@@ -1,4 +1,5 @@
 using Mammod.Data;
+using Mammod.Database.Documents;
 using Mammod.Dtos;
 using Mammod.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -18,10 +19,40 @@ namespace Mammod.Controllers;
 /// </summary>
 [ApiController]
 [Route("manifests")]
-public sealed class ManifestsController(TmsStore store) : ControllerBase
+public sealed class ManifestsController(TmsStore store, DocumentReadQueries? reads = null) : ControllerBase
 {
+    /// <summary>
+    /// Reads come from SQL, scoped to the warehouse the request named.
+    ///
+    /// <paramref name="reads"/> is only registered when a database is
+    /// configured, so a plain <c>dotnet run</c> with no connection string still
+    /// works off the seed — that is the whole reason the parameter is optional.
+    /// With a database it is always present, and the store is not consulted:
+    /// two sources answering the same question is how they start disagreeing.
+    /// </summary>
     [HttpGet]
-    public ActionResult<List<Manifest>> List() => store.ListManifests();
+    public async Task<ActionResult<List<Manifest>>> List(CancellationToken ct) =>
+        reads is null ? store.ListManifests() : await reads.ManifestsAsync(ct);
+
+    /// <summary>
+    /// One manifest by its number.
+    ///
+    /// A document belonging to another warehouse answers 404, not 403: saying
+    /// "forbidden" would confirm the number exists somewhere, which is itself
+    /// something the caller is not entitled to know.
+    /// </summary>
+    [HttpGet("{id}")]
+    public async Task<ActionResult<Manifest>> Detail(string id, CancellationToken ct)
+    {
+        if (reads is null)
+        {
+            var seeded = store.ListManifests().FirstOrDefault(m => m.Id == id || m.ManifestNo == id);
+            return seeded is null ? NotFound() : seeded;
+        }
+
+        var manifest = await reads.ManifestAsync(id, ct);
+        return manifest is null ? NotFound() : manifest;
+    }
 
     /// <summary>
     /// Delivery orders waiting to be loaded onto a truck.
@@ -31,7 +62,31 @@ public sealed class ManifestsController(TmsStore store) : ControllerBase
     /// never read as a manifest id.
     /// </summary>
     [HttpGet("pending-stops")]
-    public ActionResult<List<ManifestStop>> PendingStops() => store.ListPendingStops();
+    public async Task<ActionResult<List<ManifestStop>>> PendingStops(
+        [FromServices] IDeliveryOrderQuery? pool, CancellationToken ct)
+    {
+        if (pool is null) return store.ListPendingStops();
+
+        // The pool is derived, not stored: the delivery orders that no live plan
+        // and no live shipment has claimed. Shaped here into the stop the client
+        // already draws, so the screen does not have to learn a second type for
+        // "an order that is not on anything yet".
+        var available = await pool.GetAvailableAsync(ct);
+        return available.Select(o => new ManifestStop
+        {
+            Id = o.OrderKey,
+            DoNo = o.OrderKey,
+            SoNo = "",
+            PickNo = "",
+            PickDate = "",
+            WarehouseCode = o.WhseId,
+            DeliveryZoneId = o.Zone is null ? "" : $"zone-{o.Zone}",
+            Customer = o.CompanyName ?? "",
+            Address = o.ShipTo,
+            DueDate = o.DeliveryDate?.ToString("yyyy-MM-dd") ?? "",
+            Position = [],
+        }).ToList();
+    }
 
     [HttpPost]
     public ActionResult<Manifest> Create([FromBody] ManifestInput input) =>

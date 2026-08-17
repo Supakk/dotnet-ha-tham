@@ -1,4 +1,5 @@
 using Mammod.Data;
+using Mammod.Database.Documents;
 using Mammod.Dtos;
 using Mammod.Models;
 using Microsoft.AspNetCore.Mvc;
@@ -14,10 +15,31 @@ namespace Mammod.Controllers;
 /// </summary>
 [ApiController]
 [Route("transport-plans")]
-public sealed class TransportPlansController(TmsStore store) : ControllerBase
+public sealed class TransportPlansController(
+    TmsStore store, DocumentReadQueries? reads = null) : ControllerBase
 {
+    /// <summary>
+    /// Reads come from SQL, scoped to the warehouse the request named. The store
+    /// answers only when no database is configured — see the note on
+    /// <c>ManifestsController.List</c>.
+    /// </summary>
     [HttpGet]
-    public ActionResult<List<TransportPlan>> List() => store.ListPlans();
+    public async Task<ActionResult<List<TransportPlan>>> List(CancellationToken ct) =>
+        reads is null ? store.ListPlans() : await reads.PlansAsync(ct);
+
+    /// <summary>A plan from another warehouse answers 404, not 403.</summary>
+    [HttpGet("{id}")]
+    public async Task<ActionResult<TransportPlan>> Detail(string id, CancellationToken ct)
+    {
+        if (reads is null)
+        {
+            var seeded = store.ListPlans().FirstOrDefault(p => p.Id == id || p.PlanNo == id);
+            return seeded is null ? NotFound() : seeded;
+        }
+
+        var plan = await reads.PlanAsync(id, ct);
+        return plan is null ? NotFound() : plan;
+    }
 
     [HttpPost]
     public ActionResult<TransportPlan> Create([FromBody] TransportPlanInput input) =>
