@@ -1,0 +1,116 @@
+/* =========================================================================
+   ROLLBACK 003 — shipment lifecycle, lineage, invoice metadata
+   =========================================================================
+   Drops the thirteen columns and the check constraint that 003 added.
+
+   Dropping a column destroys whatever is in it. Migration 003 wrote nothing,
+   so immediately after applying it there is nothing to lose — but once the
+   application has been running, these columns hold who confirmed a shipment,
+   why one was cancelled, and which document replaced which. None of that is
+   recoverable from anywhere else.
+
+   So it refuses if any of them holds data, unless -Force is passed. Straight
+   after 003 the check passes and the rollback is free; later it makes you say
+   out loud that you are discarding lifecycle history.
+
+   PARENT_SHIPMENTKEY, CONFIRMDATE, SENTDATE, CANCELREASON and the express
+   columns are NOT dropped — they came from 02-alter-existing.sql, long before
+   this migration, and are not 003's to remove.
+   ========================================================================= */
+
+SET NOCOUNT ON;
+SET XACT_ABORT ON;
+/* sqlcmd connects with QUOTED_IDENTIFIER OFF, which makes it impossible to
+   create a filtered index. Set both explicitly so this file behaves the same
+   however it is run - from sqlcmd, from SSMS, or from the runner. */
+SET QUOTED_IDENTIFIER ON;
+SET ANSI_NULLS ON;
+GO
+
+BEGIN TRANSACTION;
+GO
+
+DECLARE @populated nvarchar(600) = (
+    SELECT STRING_AGG(x.col, ', ')
+    FROM (
+        SELECT 'CONFIRMBY' AS col WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE CONFIRMBY IS NOT NULL)
+        UNION ALL SELECT 'SENTBY' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE SENTBY IS NOT NULL)
+        UNION ALL SELECT 'COMPLETEDDATE' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE COMPLETEDDATE IS NOT NULL)
+        UNION ALL SELECT 'CANCELLEDBY' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE CANCELLEDBY IS NOT NULL)
+        UNION ALL SELECT 'CANCELLEDDATE' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE CANCELLEDDATE IS NOT NULL)
+        UNION ALL SELECT 'DELETEDBY' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE DELETEDBY IS NOT NULL)
+        UNION ALL SELECT 'DELETEDDATE' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE DELETEDDATE IS NOT NULL)
+        UNION ALL SELECT 'DELETEREASON' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE DELETEREASON IS NOT NULL)
+        UNION ALL SELECT 'RETRYCOUNT' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE RETRYCOUNT IS NOT NULL)
+        UNION ALL SELECT 'EXTERNALREFERENCE' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE EXTERNALREFERENCE IS NOT NULL)
+        UNION ALL SELECT 'INVOICEDAT' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE INVOICEDAT IS NOT NULL)
+        UNION ALL SELECT 'INVOICEDBY' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE INVOICEDBY IS NOT NULL)
+        UNION ALL SELECT 'RELATIONTYPE' WHERE EXISTS (SELECT 1 FROM dbo.DOC_SHIPMENT_HDR WHERE RELATIONTYPE IS NOT NULL)
+    ) x
+);
+
+IF @populated IS NOT NULL AND ISNULL(CAST(SESSION_CONTEXT(N'AllowAuditLoss') AS bit), 0) = 0
+BEGIN
+    PRINT 'Columns holding data: ' + @populated;
+    THROW 50004, 'STOP: rolling back 003 would discard shipment lifecycle history. Re-run with -Force if intended.', 1;
+END
+GO
+
+/* The constraint goes first — it reads RELATIONTYPE and PARENT_SHIPMENTKEY,
+   and a column cannot be dropped while a check depends on it. */
+IF EXISTS (SELECT 1 FROM sys.check_constraints WHERE name = 'CK_SHIPMENT_HDR_RELATIONTYPE')
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP CONSTRAINT CK_SHIPMENT_HDR_RELATIONTYPE;
+GO
+
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'RELATIONTYPE') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN RELATIONTYPE;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'INVOICEDBY') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN INVOICEDBY;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'INVOICEDAT') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN INVOICEDAT;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'EXTERNALREFERENCE') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN EXTERNALREFERENCE;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'RETRYCOUNT') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN RETRYCOUNT;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'DELETEREASON') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN DELETEREASON;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'DELETEDDATE') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN DELETEDDATE;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'DELETEDBY') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN DELETEDBY;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'CANCELLEDDATE') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN CANCELLEDDATE;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'CANCELLEDBY') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN CANCELLEDBY;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'COMPLETEDDATE') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN COMPLETEDDATE;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'SENTBY') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN SENTBY;
+GO
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'CONFIRMBY') IS NOT NULL
+    ALTER TABLE dbo.DOC_SHIPMENT_HDR DROP COLUMN CONFIRMBY;
+GO
+
+/* Untouched by this rollback, and worth proving. */
+IF COL_LENGTH('dbo.DOC_SHIPMENT_HDR', 'PARENT_SHIPMENTKEY') IS NULL
+    THROW 50004, 'rollback 003 verification failed: PARENT_SHIPMENTKEY was dropped. It predates 003 and must survive.', 1;
+
+PRINT 'rollback 003: 13 columns and 1 constraint removed.';
+GO
+
+DELETE FROM dbo.TMS_SCHEMA_MIGRATION WHERE VERSION = '003';
+GO
+
+COMMIT TRANSACTION;
+GO

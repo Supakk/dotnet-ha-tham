@@ -42,6 +42,13 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
 
     protected override void OnModelCreating(ModelBuilder b)
     {
+        // The document tables — plans, shipments, their stops and lines — are
+        // configured next door. They are a different kind of thing from the
+        // masters above: composite-keyed, written as well as read, and carrying
+        // a concurrency token, so keeping them apart stops this file becoming
+        // one long wall of column names.
+        Documents.DocumentModel.Configure(b);
+
         b.Entity<WhseRow>(e =>
         {
             e.ToTable("MST_WHSE");
