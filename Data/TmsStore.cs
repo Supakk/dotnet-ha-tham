@@ -432,6 +432,23 @@ public sealed class TmsStore
             var held = kept.Select(s => s.Id).ToHashSet();
             var added = TakeFromPool(stopIds.Where(sid => !held.Contains(sid)));
 
+            // A plan covers one zone. `UpdatePlan` has always emptied a plan whose
+            // zone is changed, on the grounds that orders from the old territory
+            // would be stranded in it — that only holds if everything in the plan
+            // belongs to the plan's zone in the first place, so it is checked here
+            // too rather than left to the screen to respect.
+            var stray = added.Concat(kept)
+                .FirstOrDefault(s => s.DeliveryZoneId != current.DeliveryZoneId);
+            if (stray is not null)
+            {
+                // Anything taken out of the pool goes back before throwing, or the
+                // rejected orders would vanish from both the plan and the queue.
+                GiveBack(added);
+                throw new DomainException(
+                    $"ใบสั่งส่ง {stray.DoNo} อยู่คนละโซนกับแผนนี้ — แผนหนึ่งใบครอบคลุมโซนเดียว " +
+                    "ถ้าต้องการส่งโซนอื่นด้วย ให้สร้างแผนของโซนนั้นแยกอีกใบ");
+            }
+
             GiveBack(dropped);
             return ReplacePlan(current with { Stops = [.. kept, .. added] });
         }
