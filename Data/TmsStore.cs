@@ -512,10 +512,19 @@ public sealed class TmsStore
             if (current.Stops.Count == 0)
                 throw new DomainException("แผนนี้ยังไม่มีรายการ — เพิ่มใบสั่งส่งก่อน");
 
-            var origin = _warehouses.FirstOrDefault(w => w.Code == "WNB");
+            // The run the plan was built for, carried onto the document it becomes.
+            // Asking for it again on the manifest was asking a question already
+            // answered: the load was gathered *because* this route passes those
+            // zones, and a dispatcher re-picking it could contradict the plan.
+            var route = FindRoute(current.RouteId);
 
-            // A manifest cut from a plan starts with no truck, driver or route — the
-            // blanks the dispatcher fills in, and what the confirm gate checks for.
+            // The route says which DC it leaves from; the warehouse master is only
+            // consulted for the coordinates, which MST_WHSE may not carry.
+            var origin = _warehouses.FirstOrDefault(w => w.Name == route.DefaultOrigin.Name)
+                ?? _warehouses.FirstOrDefault(w => w.Code == "WNB");
+
+            // Still no truck or driver: planning decides what ships, the dispatcher
+            // decides how. Those are the blanks the confirm gate checks for.
             var manifest = new Manifest
             {
                 Id = $"mn-{_nextManifest}",
@@ -524,7 +533,12 @@ public sealed class TmsStore
                 ClosedAt = Now(),
                 Colour = Palette.RouteColour(_nextManifest),
                 Vehicle = "6-wheel",
-                Origin = new GeoPoint(origin?.Name ?? "DC นนทบุรี", origin?.Position ?? [13.8591, 100.5217]),
+                RouteId = route.Id,
+                RouteCode = route.Code,
+                RouteName = route.Name,
+                Origin = new GeoPoint(
+                    origin?.Name ?? route.DefaultOrigin.Name,
+                    origin?.Position ?? route.DefaultOrigin.Position),
                 Dock = "Dock 1",
                 // The trip is not priced until a carrier is chosen, which happens on
                 // the manifest — a plan has no rate to quote from.
