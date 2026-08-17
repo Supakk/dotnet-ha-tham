@@ -478,5 +478,3 @@ SQLEXPRESS` → `TCP/IP` → Enable → แล้ว `Restart-Service 'MSSQL$SQL
 `src/features/logistics/types` ·
 กฎที่ mock บังคับ: `src/features/logistics/api/manifests.mock.ts` ·
 ลำดับการทำงาน: `docs/tms-sequence.md`
-
-

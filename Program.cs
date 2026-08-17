@@ -115,6 +115,15 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// แผนขนส่งอยู่ในหน่วยความจำ แต่สายส่งอาจมาจาก SQL Server — ผูกให้แผนหาสายส่ง
+// จากที่เดียวกับที่ GET /routes ตอบ ไม่งั้นตอนเปิดฐานไว้ สายที่หน้าจอให้เลือก
+// จะหาไม่เจอทุกตัว เพราะคนละชุด id (rt-RT-NORTH-01 กับ rt-1)
+//
+// ต่อสายทีหลังตรงนี้แทนที่จะฉีดผ่าน constructor เพราะ MasterQueries พึ่ง TmsStore
+// อยู่แล้ว ถ้าฉีดกลับไปอีกทางจะเป็นวงกลม
+app.Services.GetRequiredService<TmsStore>()
+    .UseRouteSource(() => app.Services.GetRequiredService<MasterQueries>().Routes());
+
 // ── ลำดับการทำงานของ request · the pipeline ─────────────────────────────────
 // Order matters here more than anywhere else in the file. Each piece only sees
 // what the ones above it let through.

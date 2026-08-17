@@ -64,8 +64,29 @@ public sealed class TmsStore
         lock (_gate) return [.. _pendingStops];
     }
 
+    /// <summary>
+    /// Where routes come from when a plan names one.
+    ///
+    /// Not <c>_routes</c> directly: with a database configured the masters are
+    /// served from SQL Server and keyed by their own code — <c>rt-RT-NORTH-01</c>
+    /// — while this seed numbers them <c>rt-1</c>. The planning screen offers
+    /// whatever <c>GET /routes</c> returned, so looking the choice up in the seed
+    /// found none of them and every save was refused with "ไม่พบสายส่งนี้".
+    ///
+    /// Set once at startup rather than injected, because <c>MasterQueries</c>
+    /// already depends on this store and constructor injection the other way
+    /// would be a cycle. Unset — plain <c>dotnet run</c> with no database — the
+    /// seed is both the source and the answer, which is what it was before.
+    /// </summary>
+    private Func<List<RouteMaster>>? _routeSource;
+
+    public void UseRouteSource(Func<List<RouteMaster>> source) => _routeSource = source;
+
+    // Called while `_gate` is held, so a configured source runs its query under
+    // the lock. It is one indexed read against a master table and the alternative
+    // — resolving outside and re-checking inside — buys a race for the trouble.
     private RouteMaster FindRoute(string id) =>
-        _routes.FirstOrDefault(r => r.Id == id)
+        (_routeSource?.Invoke() ?? _routes).FirstOrDefault(r => r.Id == id)
         ?? throw DomainException.NotFound("ไม่พบสายส่งนี้");
 
     private Manifest FindManifest(string id) =>
