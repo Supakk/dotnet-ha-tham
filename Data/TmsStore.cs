@@ -64,6 +64,10 @@ public sealed class TmsStore
         lock (_gate) return [.. _pendingStops];
     }
 
+    private RouteMaster FindRoute(string id) =>
+        _routes.FirstOrDefault(r => r.Id == id)
+        ?? throw DomainException.NotFound("ไม่พบสายส่งนี้");
+
     private Manifest FindManifest(string id) =>
         _manifests.FirstOrDefault(m => m.Id == id)
         ?? throw DomainException.NotFound("ไม่พบใบปิดบรรทุกนี้");
@@ -367,6 +371,7 @@ public sealed class TmsStore
     {
         lock (_gate)
         {
+            var route = FindRoute(input.RouteId);
             var created = new TransportPlan
             {
                 Id = $"pl-{_nextPlan}",
@@ -376,7 +381,9 @@ public sealed class TmsStore
                 CreatedBy = Author,
                 WarehouseCode = input.WarehouseCode,
                 DeliveryDate = input.DeliveryDate,
-                DeliveryZoneId = input.DeliveryZoneId,
+                RouteId = route.Id,
+                RouteCode = route.Code,
+                RouteName = route.Name,
                 Note = input.Note,
                 Stops = [],
             };
@@ -394,17 +401,21 @@ public sealed class TmsStore
             var current = FindPlan(id);
             AssertPlanStatus(current, [TransportPlanStatus.Draft], "แก้ไข");
 
+            var route = FindRoute(input.RouteId);
             var moved = current with
             {
                 WarehouseCode = input.WarehouseCode,
                 DeliveryDate = input.DeliveryDate,
-                DeliveryZoneId = input.DeliveryZoneId,
+                RouteId = route.Id,
+                RouteCode = route.Code,
+                RouteName = route.Name,
                 Note = input.Note,
             };
 
-            // Moving the plan to another zone would leave orders from the old one
-            // stranded in it, so they go back to the pool and are picked again.
-            if (input.DeliveryZoneId != current.DeliveryZoneId && current.Stops.Count > 0)
+            // Moving the plan to another route would leave orders from territory
+            // the new one does not reach stranded in it, so they go back to the
+            // pool and are picked again.
+            if (route.Id != current.RouteId && current.Stops.Count > 0)
             {
                 GiveBack(current.Stops);
                 return ReplacePlan(moved with { Stops = [] });
@@ -432,25 +443,36 @@ public sealed class TmsStore
             var held = kept.Select(s => s.Id).ToHashSet();
             var added = TakeFromPool(stopIds.Where(sid => !held.Contains(sid)));
 
-            // A plan covers one zone. `UpdatePlan` has always emptied a plan whose
-            // zone is changed, on the grounds that orders from the old territory
-            // would be stranded in it — that only holds if everything in the plan
-            // belongs to the plan's zone in the first place, so it is checked here
-            // too rather than left to the screen to respect.
-            var stray = added.Concat(kept)
-                .FirstOrDefault(s => s.DeliveryZoneId != current.DeliveryZoneId);
+            // An order has to sit in a zone the plan's route actually reaches.
+            // Not one zone: a lorry drives a line, and the northern run passes
+            // through Nakhon Sawan and Phichit on its way to Phitsanulok, so all
+            // three are loadable onto it. A zone the route never enters is not.
+            var route = FindRoute(current.RouteId);
+            var reachable = route.DeliveryZoneIds.ToHashSet();
+            var stray = added.Concat(kept).FirstOrDefault(s => !reachable.Contains(s.DeliveryZoneId));
             if (stray is not null)
             {
                 // Anything taken out of the pool goes back before throwing, or the
                 // rejected orders would vanish from both the plan and the queue.
                 GiveBack(added);
                 throw new DomainException(
-                    $"ใบสั่งส่ง {stray.DoNo} อยู่คนละโซนกับแผนนี้ — แผนหนึ่งใบครอบคลุมโซนเดียว " +
-                    "ถ้าต้องการส่งโซนอื่นด้วย ให้สร้างแผนของโซนนั้นแยกอีกใบ");
+                    $"ใบสั่งส่ง {stray.DoNo} อยู่ในโซนที่สาย {route.Code} ไม่ได้วิ่งผ่าน — " +
+                    "เลือกได้เฉพาะใบในโซนที่สายนี้ผ่าน หรือสร้างแผนของสายอื่นแยกอีกใบ");
             }
 
             GiveBack(dropped);
-            return ReplacePlan(current with { Stops = [.. kept, .. added] });
+            // Ordered the way the lorry drives it: zone by zone along the route,
+            // so the drop sequence falls out of the plan instead of being sorted
+            // by hand afterwards.
+            var order = route.DeliveryZoneIds
+                .Select((zoneId, index) => (zoneId, index))
+                .ToDictionary(pair => pair.zoneId, pair => pair.index);
+            var stops = kept.Concat(added)
+                .OrderBy(s => order.GetValueOrDefault(s.DeliveryZoneId, int.MaxValue))
+                .ThenBy(s => s.DueDate)
+                .ToList();
+
+            return ReplacePlan(current with { Stops = stops });
         }
     }
 

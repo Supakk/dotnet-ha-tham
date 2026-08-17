@@ -201,8 +201,20 @@ public sealed record TransportPlan
     public required string CreatedBy { get; init; }
     public required string WarehouseCode { get; init; }
     public required string DeliveryDate { get; init; }
-    /// <summary>Territory the plan is built for — the pool is narrowed to it.</summary>
-    public required string DeliveryZoneId { get; init; }
+    /// <summary>
+    /// The run this plan is being built for. The pool is narrowed to the zones
+    /// the route passes through, in the order it passes through them.
+    ///
+    /// A route rather than a zone because a lorry drives a line, not an area: the
+    /// northern run is bound for Phitsanulok and calls at Nakhon Sawan and
+    /// Phichit on the way, which is ordinary and which a single zone cannot say.
+    /// Each order still carries its own zone — see <see cref="ManifestStop.DeliveryZoneId"/>.
+    /// </summary>
+    public required string RouteId { get; init; }
+
+    /// <summary>Shown on the plan without the client having to look the route up.</summary>
+    public string RouteCode { get; init; } = "";
+    public string RouteName { get; init; } = "";
     public string Note { get; init; } = "";
     public List<ManifestStop> Stops { get; init; } = [];
 

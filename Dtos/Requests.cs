@@ -97,7 +97,7 @@ public sealed record TransportPlanInput
 {
     public string WarehouseCode { get; init; } = "";
     public string DeliveryDate { get; init; } = "";
-    public string DeliveryZoneId { get; init; } = "";
+    public string RouteId { get; init; } = "";
     public string Note { get; init; } = "";
 }
 
