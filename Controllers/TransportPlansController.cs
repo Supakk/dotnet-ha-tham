@@ -43,4 +43,19 @@ public sealed class TransportPlansController(TmsStore store) : ControllerBase
     /// <summary>Drops the plan and returns everything in it to the pending pool.</summary>
     [HttpPost("{id}/cancel")]
     public ActionResult<TransportPlan> Cancel(string id) => store.CancelPlan(id);
+
+    /// <summary>
+    /// Raises a cancelled plan again as a fresh draft carrying the same header
+    /// and whatever of its load is still unplanned.
+    /// </summary>
+    [HttpPost("{id}/recreate")]
+    public ActionResult<PlanRecreateResult> Recreate(string id) => store.RecreatePlan(id);
+
+    /// <summary>
+    /// Removes the plan outright — for one raised by mistake. Only before a
+    /// manifest has been cut from it; after that the plan is the record of how
+    /// that document came about.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { store.DeletePlan(id); return NoContent(); }
 }

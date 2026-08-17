@@ -482,19 +482,25 @@ public sealed class TmsStore
             }
 
             GiveBack(dropped);
-            // Ordered the way the lorry drives it: zone by zone along the route,
-            // so the drop sequence falls out of the plan instead of being sorted
-            // by hand afterwards.
-            var order = route.DeliveryZoneIds
-                .Select((zoneId, index) => (zoneId, index))
-                .ToDictionary(pair => pair.zoneId, pair => pair.index);
-            var stops = kept.Concat(added)
-                .OrderBy(s => order.GetValueOrDefault(s.DeliveryZoneId, int.MaxValue))
-                .ThenBy(s => s.DueDate)
-                .ToList();
-
-            return ReplacePlan(current with { Stops = stops });
+            return ReplacePlan(current with { Stops = InRouteOrder([.. kept, .. added], route) });
         }
+    }
+
+    /// <summary>
+    /// The order the lorry drives: zone by zone along the route, then by due date
+    /// within a zone. The route's sequence is the only thing that knows Nakhon
+    /// Sawan comes before Phichit on the northern run, so the drop order falls
+    /// out of the plan instead of being sorted by hand afterwards.
+    /// </summary>
+    private static List<ManifestStop> InRouteOrder(List<ManifestStop> stops, RouteMaster route)
+    {
+        var rank = route.DeliveryZoneIds
+            .Select((zoneId, index) => (zoneId, index))
+            .ToDictionary(pair => pair.zoneId, pair => pair.index);
+
+        return [.. stops
+            .OrderBy(s => rank.GetValueOrDefault(s.DeliveryZoneId, int.MaxValue))
+            .ThenBy(s => s.DueDate, StringComparer.Ordinal)];
     }
 
     public PlanIssueResult IssuePlan(string id)
@@ -554,7 +560,86 @@ public sealed class TmsStore
             AssertPlanStatus(current, [TransportPlanStatus.Draft], "ยกเลิก");
 
             GiveBack(current.Stops);
-            return ReplacePlan(current with { Status = TransportPlanStatus.Cancelled, Stops = [] });
+            return ReplacePlan(current with
+            {
+                Status = TransportPlanStatus.Cancelled,
+                // Remembered so the plan can be raised again as it was. The stops
+                // themselves go back to the pool and may be taken by someone else
+                // before that happens, which is why this is a list of ids and not
+                // the orders: what can still be collected is decided at the time,
+                // not promised now.
+                CancelledStopIds = [.. current.Stops.Select(s => s.Id)],
+                Stops = [],
+            });
+        }
+    }
+
+    /// <summary>
+    /// Removes the plan outright — for one raised by mistake, where cancelling
+    /// would leave a row on the list saying so forever.
+    ///
+    /// Only before a manifest exists. Once issued the plan is the record of how
+    /// that document came about, and the document outlives it.
+    /// </summary>
+    public TransportPlan DeletePlan(string id)
+    {
+        lock (_gate)
+        {
+            var current = FindPlan(id);
+            AssertPlanStatus(current, [TransportPlanStatus.Draft, TransportPlanStatus.Cancelled], "ลบ");
+
+            // A draft still holds its orders. Dropping the plan without handing
+            // them back would strand them: out of the pool, on no document, and
+            // invisible to every screen.
+            GiveBack(current.Stops);
+            _plans = [.. _plans.Where(p => p.Id != current.Id)];
+            return current;
+        }
+    }
+
+    /// <summary>
+    /// Raises a cancelled plan again as a fresh draft, with the same header and
+    /// as much of the same load as is still free.
+    ///
+    /// A new number rather than reviving the old one: the cancellation was
+    /// reported to the people downstream, and a number that comes back to life
+    /// after that is a number nobody can trust. The cancelled plan stays on the
+    /// list, now pointing at its replacement.
+    /// </summary>
+    public PlanRecreateResult RecreatePlan(string id)
+    {
+        lock (_gate)
+        {
+            var current = FindPlan(id);
+            AssertPlanStatus(current, [TransportPlanStatus.Cancelled], "สร้างใหม่อีกครั้ง");
+
+            var route = FindRoute(current.RouteId);
+            // Whatever is still in the pool. Orders picked up by another plan in
+            // the meantime are simply not there, and the caller is told how many
+            // rather than being handed a plan quietly missing half its load.
+            var wanted = current.CancelledStopIds;
+            var regained = TakeFromPool(wanted);
+            var lost = wanted.Count - regained.Count;
+
+            var created = new TransportPlan
+            {
+                Id = $"pl-{_nextPlan}",
+                PlanNo = $"PL-202608-{_nextPlan.ToString().PadLeft(4, '0')}",
+                Status = TransportPlanStatus.Draft,
+                CreatedAt = Now(),
+                CreatedBy = Author,
+                WarehouseCode = current.WarehouseCode,
+                DeliveryDate = current.DeliveryDate,
+                RouteId = route.Id,
+                RouteCode = route.Code,
+                RouteName = route.Name,
+                Note = current.Note,
+                Stops = InRouteOrder(regained, route),
+            };
+            _nextPlan += 1;
+            _plans = [created, .. _plans];
+
+            return new PlanRecreateResult(created, ReplacePlan(current with { RecreatedAsNo = created.PlanNo }), lost);
         }
     }
 
@@ -971,3 +1056,11 @@ public sealed class TmsStore
 
 /// <summary>Both documents the issue step writes, in the shape the client destructures.</summary>
 public sealed record PlanIssueResult(TransportPlan Plan, Manifest Manifest);
+
+/// <summary>
+/// What raising a cancelled plan again produced: the new draft, the cancelled
+/// plan now pointing at it, and how many of its orders could not be collected
+/// back because another plan had taken them. The client needs all three — the
+/// count is what turns a quietly short plan into a sentence the planner reads.
+/// </summary>
+public sealed record PlanRecreateResult(TransportPlan Plan, TransportPlan Cancelled, int Unavailable);

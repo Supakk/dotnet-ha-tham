@@ -218,6 +218,22 @@ public sealed record TransportPlan
     public string Note { get; init; } = "";
     public List<ManifestStop> Stops { get; init; } = [];
 
+    /// <summary>
+    /// What the plan held when it was cancelled, so it can be raised again as it
+    /// was. Ids rather than the orders themselves: cancelling returns them to the
+    /// pool, where someone else may take them, so what can still be collected is
+    /// decided when the plan is recreated rather than promised here.
+    /// </summary>
+    public List<string> CancelledStopIds { get; init; } = [];
+
+    /// <summary>
+    /// Set on a cancelled plan once it has been raised again — the number of the
+    /// draft that replaced it, so the row says what became of it instead of being
+    /// a dead end.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? RecreatedAsNo { get; init; }
+
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ManifestId { get; init; }
 

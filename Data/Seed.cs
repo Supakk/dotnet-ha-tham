@@ -48,14 +48,14 @@ public static class Seed
     /// </summary>
     public static List<ManifestStop> PendingStops() =>
     [
-        Stop("s-1", "DO-2026-0801", "", "zone-1", "บจก. นครสวรรค์การค้า", "อ.เมือง จ.นครสวรรค์", 150, 3000, 10.5, 0, [15.7047, 100.1372], "WSK", "2026-07-28", "2026-07-31"),
-        Stop("s-2", "DO-2026-0802", "", "zone-2", "หจก. พิจิตรซัพพลาย", "อ.เมือง จ.พิจิตร", 200, 4000, 12.0, 15500, [16.4429, 100.3487], "WSK", "2026-08-01", "2026-08-07"),
-        Stop("s-3", "DO-2026-0803", "", "zone-3", "ร้านพิษณุโลกมาร์ท", "อ.เมือง จ.พิษณุโลก", 100, 1500, 6.0, 0, [16.8211, 100.2659], "WPD", "2026-08-02", "2026-08-08"),
-        Stop("s-4", "DO-2026-0804", "", "zone-4", "บจก. อยุธยาเทรดดิ้ง", "อ.พระนครศรีอยุธยา จ.พระนครศรีอยุธยา", 80, 1200, 4.5, 8200, [14.3532, 100.5689], "WPD", "2026-07-20", "2026-07-25", deliverTo: "หน่วยงานก่อสร้าง ไซต์อยุธยา"),
-        Stop("s-5", "DO-2026-0805", "", "zone-5", "สหกรณ์ลพบุรี", "อ.เมือง จ.ลพบุรี", 120, 2400, 8.0, 0, [14.7995, 100.6534], "WWP", "2026-08-03", "2026-08-09"),
-        Stop("s-6", "DO-2026-0806", "", "zone-6", "บจก. สระบุรีวัสดุ", "อ.เมือง จ.สระบุรี", 90, 1800, 5.5, 4300, [14.5289, 100.9101], "WWP", "2026-08-03", "2026-08-10"),
-        Stop("s-7", "DO-2026-0807", "", "zone-7", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 160, 3200, 11.0, 0, [13.1731, 100.9310], "WSK", "2026-07-15", "2026-07-18"),
-        Stop("s-8", "DO-2026-0808", "", "zone-8", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 110, 2100, 7.5, 12800, [12.6814, 101.2816], "WPD", "2026-08-04", "2026-08-11", deliverTo: "คลังกระจายสินค้า ระยอง"),
+        Stop("s-1", "DO-2026-0801", "", "zone-TH-001", "บจก. นครสวรรค์การค้า", "อ.เมือง จ.นครสวรรค์", 150, 3000, 10.5, 0, [15.7047, 100.1372], "WSK", "2026-07-28", "2026-07-31"),
+        Stop("s-2", "DO-2026-0802", "", "zone-TH-002", "หจก. พิจิตรซัพพลาย", "อ.เมือง จ.พิจิตร", 200, 4000, 12.0, 15500, [16.4429, 100.3487], "WSK", "2026-08-01", "2026-08-07"),
+        Stop("s-3", "DO-2026-0803", "", "zone-TH-003", "ร้านพิษณุโลกมาร์ท", "อ.เมือง จ.พิษณุโลก", 100, 1500, 6.0, 0, [16.8211, 100.2659], "WPD", "2026-08-02", "2026-08-08"),
+        Stop("s-4", "DO-2026-0804", "", "zone-TH-004", "บจก. อยุธยาเทรดดิ้ง", "อ.พระนครศรีอยุธยา จ.พระนครศรีอยุธยา", 80, 1200, 4.5, 8200, [14.3532, 100.5689], "WPD", "2026-07-20", "2026-07-25", deliverTo: "หน่วยงานก่อสร้าง ไซต์อยุธยา"),
+        Stop("s-5", "DO-2026-0805", "", "zone-TH-005", "สหกรณ์ลพบุรี", "อ.เมือง จ.ลพบุรี", 120, 2400, 8.0, 0, [14.7995, 100.6534], "WWP", "2026-08-03", "2026-08-09"),
+        Stop("s-6", "DO-2026-0806", "", "zone-TH-006", "บจก. สระบุรีวัสดุ", "อ.เมือง จ.สระบุรี", 90, 1800, 5.5, 4300, [14.5289, 100.9101], "WWP", "2026-08-03", "2026-08-10"),
+        Stop("s-7", "DO-2026-0807", "", "zone-TH-007", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 160, 3200, 11.0, 0, [13.1731, 100.9310], "WSK", "2026-07-15", "2026-07-18"),
+        Stop("s-8", "DO-2026-0808", "", "zone-TH-008", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 110, 2100, 7.5, 12800, [12.6814, 101.2816], "WPD", "2026-08-04", "2026-08-11", deliverTo: "คลังกระจายสินค้า ระยอง"),
     ];
 
     private static string At(int day, int hour, int minute) =>
@@ -93,7 +93,7 @@ public static class Seed
             MaxVolumeCbm = 35,
             CarrierId = "cr-1",
             Carrier = "Fleet อินเฮาส์ (คลังบางบัวทอง)",
-            RouteId = "rt-1",
+            RouteId = "rt-RT-NORTH-01",
             RouteCode = "RT-NORTH-01",
             RouteName = "สายเหนือ (นครสวรรค์ - พิษณุโลก)",
             Origin = DcNonthaburi,
@@ -104,8 +104,8 @@ public static class Seed
             Colour = Palette.RouteColour(0),
             Stops =
             [
-                Stop("h-5", "DO-2026-0781", "MN-202608-0043", "zone-1", "บจก. นครสวรรค์การค้า", "อ.เมือง จ.นครสวรรค์", 140, 2800, 9.5, 0, [15.7047, 100.1372], "WSK", "2026-08-04", "2026-08-06"),
-                Stop("h-6", "DO-2026-0782", "MN-202608-0043", "zone-3", "ร้านพิษณุโลกมาร์ท", "อ.เมือง จ.พิษณุโลก", 95, 1900, 6.5, 7400, [16.8211, 100.2659], "WSK", "2026-08-04", "2026-08-06"),
+                Stop("h-5", "DO-2026-0781", "MN-202608-0043", "zone-TH-001", "บจก. นครสวรรค์การค้า", "อ.เมือง จ.นครสวรรค์", 140, 2800, 9.5, 0, [15.7047, 100.1372], "WSK", "2026-08-04", "2026-08-06"),
+                Stop("h-6", "DO-2026-0782", "MN-202608-0043", "zone-TH-003", "ร้านพิษณุโลกมาร์ท", "อ.เมือง จ.พิษณุโลก", 95, 1900, 6.5, 7400, [16.8211, 100.2659], "WSK", "2026-08-04", "2026-08-06"),
             ],
         },
 
@@ -131,7 +131,7 @@ public static class Seed
             MaxVolumeCbm = 12,
             CarrierId = "cr-2",
             Carrier = "ไทยขนส่งด่วน",
-            RouteId = "rt-3",
+            RouteId = "rt-RT-WEST-02",
             RouteCode = "RT-WEST-02",
             RouteName = "สายตะวันตก (นครปฐม - ราชบุรี)",
             Origin = DcNonthaburi,
@@ -142,8 +142,8 @@ public static class Seed
             Colour = Palette.RouteColour(1),
             Stops =
             [
-                Stop("h-7", "DO-2026-0783", "MN-202608-0042", "zone-9", "นครปฐมค้าส่ง", "อ.เมือง จ.นครปฐม", 55, 850, 3.0, 0, [13.8199, 100.0621], "WPD", "2026-08-03", "2026-08-05"),
-                Stop("h-8", "DO-2026-0784", "MN-202608-0042", "zone-10", "ราชบุรีมาร์ท", "อ.เมือง จ.ราชบุรี", 65, 1000, 3.6, 4900, [13.5282, 99.8134], "WPD", "2026-08-03", "2026-08-05"),
+                Stop("h-7", "DO-2026-0783", "MN-202608-0042", "zone-TH-009", "นครปฐมค้าส่ง", "อ.เมือง จ.นครปฐม", 55, 850, 3.0, 0, [13.8199, 100.0621], "WPD", "2026-08-03", "2026-08-05"),
+                Stop("h-8", "DO-2026-0784", "MN-202608-0042", "zone-TH-010", "ราชบุรีมาร์ท", "อ.เมือง จ.ราชบุรี", 65, 1000, 3.6, 4900, [13.5282, 99.8134], "WPD", "2026-08-03", "2026-08-05"),
             ],
         },
 
@@ -170,7 +170,7 @@ public static class Seed
             MaxVolumeCbm = 35,
             CarrierId = "cr-1",
             Carrier = "Fleet อินเฮาส์ (คลังบางบัวทอง)",
-            RouteId = "rt-2",
+            RouteId = "rt-RT-EAST-01",
             RouteCode = "RT-EAST-01",
             RouteName = "สายตะวันออก (ชลบุรี - ระยอง)",
             Origin = DcNonthaburi,
@@ -182,8 +182,8 @@ public static class Seed
             Colour = Palette.RouteColour(2),
             Stops =
             [
-                Stop("h-1", "DO-2026-0771", "MN-202608-0041", "zone-7", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 160, 3200, 11, 0, [13.1731, 100.9310], "WSK", "2026-08-01", "2026-08-04"),
-                Stop("h-2", "DO-2026-0772", "MN-202608-0041", "zone-8", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 110, 2100, 7.5, 12800, [12.6814, 101.2816], "WSK", "2026-08-01", "2026-08-04"),
+                Stop("h-1", "DO-2026-0771", "MN-202608-0041", "zone-TH-007", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 160, 3200, 11, 0, [13.1731, 100.9310], "WSK", "2026-08-01", "2026-08-04"),
+                Stop("h-2", "DO-2026-0772", "MN-202608-0041", "zone-TH-008", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 110, 2100, 7.5, 12800, [12.6814, 101.2816], "WSK", "2026-08-01", "2026-08-04"),
             ],
         },
 
@@ -211,7 +211,7 @@ public static class Seed
             MaxVolumeCbm = 12,
             CarrierId = "cr-2",
             Carrier = "ไทยขนส่งด่วน",
-            RouteId = "rt-3",
+            RouteId = "rt-RT-WEST-02",
             RouteCode = "RT-WEST-02",
             RouteName = "สายตะวันตก (นครปฐม - ราชบุรี)",
             Origin = DcNonthaburi,
@@ -229,10 +229,10 @@ public static class Seed
             Colour = Palette.RouteColour(3),
             Stops =
             [
-                Stop("h-3", "DO-2026-0765", "MN-202608-0040", "zone-9", "นครปฐมค้าส่ง", "อ.เมือง จ.นครปฐม", 60, 900, 3.2, 0, [13.8199, 100.0621], "WPD", "2026-07-30", "2026-08-03", status: "delivered"),
+                Stop("h-3", "DO-2026-0765", "MN-202608-0040", "zone-TH-009", "นครปฐมค้าส่ง", "อ.เมือง จ.นครปฐม", 60, 900, 3.2, 0, [13.8199, 100.0621], "WPD", "2026-07-30", "2026-08-03", status: "delivered"),
                 // Goes to a third-party site rather than the customer's own address,
                 // so the "ส่งต่างที่" report has a completed run to report on.
-                Stop("h-4", "DO-2026-0766", "MN-202608-0040", "zone-10", "ราชบุรีมาร์ท", "อ.เมือง จ.ราชบุรี", 70, 1100, 4.0, 5600, [13.5282, 99.8134], "WPD", "2026-07-30", "2026-08-03", status: "delivered", deliverTo: "โรงตัดนอก ราชบุรี (รับของแทนลูกค้า)"),
+                Stop("h-4", "DO-2026-0766", "MN-202608-0040", "zone-TH-010", "ราชบุรีมาร์ท", "อ.เมือง จ.ราชบุรี", 70, 1100, 4.0, 5600, [13.5282, 99.8134], "WPD", "2026-07-30", "2026-08-03", status: "delivered", deliverTo: "โรงตัดนอก ราชบุรี (รับของแทนลูกค้า)"),
             ],
         },
 
@@ -260,7 +260,7 @@ public static class Seed
             MaxVolumeCbm = 22,
             CarrierId = "cr-3",
             Carrier = "สยามโลจิสติกส์ พาร์ทเนอร์",
-            RouteId = "rt-2",
+            RouteId = "rt-RT-EAST-01",
             RouteCode = "RT-EAST-01",
             RouteName = "สายตะวันออก (ชลบุรี - ระยอง)",
             Origin = DcNonthaburi,
@@ -273,8 +273,8 @@ public static class Seed
             [
                 // The drop QC stopped the load on, kept as `returned` so the document
                 // says which one rather than only that something went wrong.
-                Stop("h-9", "DO-2026-0786", "MN-202608-0039", "zone-7", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 130, 2600, 8.8, 0, [13.1731, 100.9310], "WWP", "2026-07-30", "2026-08-02", status: "returned"),
-                Stop("h-10", "DO-2026-0787", "MN-202608-0039", "zone-8", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 85, 1700, 5.9, 9100, [12.6814, 101.2816], "WWP", "2026-07-30", "2026-08-02"),
+                Stop("h-9", "DO-2026-0786", "MN-202608-0039", "zone-TH-007", "ชลบุรี ซูเปอร์มาร์เก็ต", "อ.ศรีราชา จ.ชลบุรี", 130, 2600, 8.8, 0, [13.1731, 100.9310], "WWP", "2026-07-30", "2026-08-02", status: "returned"),
+                Stop("h-10", "DO-2026-0787", "MN-202608-0039", "zone-TH-008", "ระยองฟู้ดส์", "อ.เมือง จ.ระยอง", 85, 1700, 5.9, 9100, [12.6814, 101.2816], "WWP", "2026-07-30", "2026-08-02"),
             ],
         },
     ];
@@ -295,7 +295,7 @@ public static class Seed
             CreatedBy = "admin : Next",
             WarehouseCode = "WSK",
             DeliveryDate = "2026-08-07",
-            RouteId = "rt-1",
+            RouteId = "rt-RT-NORTH-01",
             RouteCode = "RT-NORTH-01",
             RouteName = "สายเหนือ (นครสวรรค์ - พิษณุโลก)",
             Note = "รอบเช้า สายเหนือ",
@@ -342,7 +342,13 @@ public static class Seed
     public static List<DeliveryZone> DeliveryZones() =>
         [.. Territories.Select((t, i) => new DeliveryZone
         {
-            Id = $"zone-{i + 1}",
+            // Keyed by code, not by position, because that is how the database
+            // keys it: MasterQueries builds zone ids as `zone-{TRANSPORTZONEKEY}`.
+            // With the masters in SQL and the documents still in memory, the two
+            // only meet if the seed spells its ids the same way — otherwise every
+            // order in the pool names a zone no route has heard of, and planning
+            // offers an empty list. See the note on `Seed.Routes`.
+            Id = $"zone-TH-{(i + 1).ToString().PadLeft(3, '0')}",
             Code = $"TH-{(i + 1).ToString().PadLeft(3, '0')}",
             Name = $"โซน{t.Province}",
             Areas = t.Areas,
@@ -356,13 +362,18 @@ public static class Seed
 
     public static List<RouteMaster> Routes() =>
     [
+        // Ids are `rt-{code}`, matching how MasterQueries keys a route read from
+        // MST_ROUTE. The masters may come from SQL while these documents stay in
+        // memory, and a plan naming `rt-1` could not be found among routes the
+        // database calls `rt-RT-NORTH-01`.
+        //
         // พิจิตร sits between the two the name gives, so the run passes through
         // it. The primary zone is the one the run is bound for — the last it
         // calls at — not the first it happens to pass.
-        new() { Id = "rt-1", Code = "RT-NORTH-01", Name = "สายเหนือ (นครสวรรค์ - พิษณุโลก)", DeliveryZoneIds = ["zone-1", "zone-2", "zone-3"], PrimaryZoneId = "zone-3", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
-        new() { Id = "rt-2", Code = "RT-EAST-01", Name = "สายตะวันออก (ชลบุรี - ระยอง)", DeliveryZoneIds = ["zone-7", "zone-8"], PrimaryZoneId = "zone-8", DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = true },
-        new() { Id = "rt-3", Code = "RT-WEST-02", Name = "สายตะวันตก (นครปฐม - ราชบุรี)", DeliveryZoneIds = ["zone-9", "zone-10"], PrimaryZoneId = "zone-10", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
-        new() { Id = "rt-4", Code = "RT-SOUTH-01", Name = "สายใต้ (เพชรบุรี - ประจวบฯ)", DeliveryZoneIds = [], DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = false },
+        new() { Id = "rt-RT-NORTH-01", Code = "RT-NORTH-01", Name = "สายเหนือ (นครสวรรค์ - พิษณุโลก)", DeliveryZoneIds = ["zone-TH-001", "zone-TH-002", "zone-TH-003"], PrimaryZoneId = "zone-TH-003", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
+        new() { Id = "rt-RT-EAST-01", Code = "RT-EAST-01", Name = "สายตะวันออก (ชลบุรี - ระยอง)", DeliveryZoneIds = ["zone-TH-007", "zone-TH-008"], PrimaryZoneId = "zone-TH-008", DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = true },
+        new() { Id = "rt-RT-WEST-02", Code = "RT-WEST-02", Name = "สายตะวันตก (นครปฐม - ราชบุรี)", DeliveryZoneIds = ["zone-TH-009", "zone-TH-010"], PrimaryZoneId = "zone-TH-010", DefaultOrigin = new GeoPoint("DC นนทบุรี", [13.8591, 100.5217]), Colour = Palette.RouteColours[0], Active = true },
+        new() { Id = "rt-RT-SOUTH-01", Code = "RT-SOUTH-01", Name = "สายใต้ (เพชรบุรี - ประจวบฯ)", DeliveryZoneIds = [], DefaultOrigin = new GeoPoint("DC บางนา", [13.6683, 100.6045]), Colour = Palette.RouteColours[1], Active = false },
     ];
 
     public static List<Carrier> Carriers() =>
