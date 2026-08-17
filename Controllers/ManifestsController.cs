@@ -55,6 +55,14 @@ public sealed class ManifestsController(TmsStore store) : ControllerBase
     public ActionResult<Manifest> Cancel(string id, [FromBody] CancelRequest? body) =>
         store.CancelManifest(id, body?.Reason ?? "");
 
+    /// <summary>
+    /// Removes a cancelled document outright. Cancel first: that is what returns
+    /// the load and records the reason, and a plan that issued this one goes back
+    /// to being a draft rather than pointing at a number that is gone.
+    /// </summary>
+    [HttpDelete("{id}")]
+    public IActionResult Delete(string id) { store.DeleteManifest(id); return NoContent(); }
+
     [HttpPost("{id}/express")]
     public ActionResult<Manifest> Express(string id, [FromBody] ExpressDispatch express) =>
         store.MarkExpress(id, express);

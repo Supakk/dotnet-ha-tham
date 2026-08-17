@@ -216,6 +216,52 @@ public sealed class TmsStore
         }
     }
 
+    /// <summary>
+    /// Removes a cancelled document outright — the one issued by mistake, where
+    /// leaving it on the list says a run was planned that never was.
+    ///
+    /// Cancelled only, deliberately. Cancelling is what returns the load to the
+    /// queue and records *why*, and a document that reached anyone downstream
+    /// should carry that reason rather than disappear. Delete is for tidying up
+    /// after, not for skipping the step.
+    /// </summary>
+    public Manifest DeleteManifest(string id)
+    {
+        lock (_gate)
+        {
+            var current = FindManifest(id);
+            AssertStatus(current, [ManifestStatus.Cancelled], "ลบ");
+
+            _manifests = [.. _manifests.Where(m => m.Id != current.Id)];
+
+            // The plan that issued it no longer has a document, so it goes back
+            // to being a draft. Left as "ออกใบขนส่งแล้ว" it would name a number
+            // that is not there, and the row would offer to open nothing.
+            //
+            // It comes back empty: the load returned to the queue when the
+            // document was cancelled, not to the plan. Re-picking it is the
+            // planner's call, which is the same position they were in before
+            // issuing.
+            var plan = _plans.FirstOrDefault(p => p.ManifestId == current.Id);
+            if (plan is not null)
+            {
+                ReplacePlan(plan with
+                {
+                    Status = TransportPlanStatus.Draft,
+                    ManifestId = null,
+                    ManifestNo = null,
+                    // Emptied, not kept. Issuing copies the load onto the document
+                    // and leaves the list on the plan; cancelling the document put
+                    // those orders back in the queue. Handing the draft its old
+                    // list as well would put every one of them in two places.
+                    Stops = [],
+                });
+            }
+
+            return current;
+        }
+    }
+
     public Manifest CancelManifest(string id, string reason)
     {
         lock (_gate)
