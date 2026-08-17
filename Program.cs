@@ -2,6 +2,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json.Serialization;
 using Mammod.Data;
 using Mammod.Database;
+using Mammod.Database.Documents;
 using Mammod.Middleware;
 using Mammod.Services;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -55,6 +56,16 @@ var useDatabase = !string.IsNullOrWhiteSpace(connectionString);
 if (useDatabase)
 {
     builder.Services.AddDbContext<AppDbContext>(options => options.UseSqlServer(connectionString));
+
+    // ── เอกสารอ่านจาก SQL · documents read from SQL ─────────────────────────
+    //
+    // ผูกแบบ scoped ทั้งหมด เพราะคลังของ request มาจาก header ไม่ใช่ค่าคงที่ —
+    // ถ้าเป็น singleton สอง request ที่คนละคลังจะเห็นข้อมูลปนกัน
+    builder.Services.AddScoped<RequestContext>();
+    builder.Services.AddScoped<IWarehouseContext>(sp => sp.GetRequiredService<RequestContext>());
+    builder.Services.AddScoped<IActorContext>(sp => sp.GetRequiredService<RequestContext>());
+    builder.Services.AddScoped<DocumentReadQueries>();
+    builder.Services.AddScoped<IDeliveryOrderQuery, DeliveryOrderQuery>();
 }
 
 builder.Services.AddSingleton(sp => new MasterQueries(
@@ -144,6 +155,10 @@ if (app.Environment.IsDevelopment())
 app.UseCors();
 app.UseAuthentication();
 app.UseAuthorization();
+
+// หลัง authentication เพราะต้องอ่านชื่อผู้ใช้จาก token ไปลง audit
+// และก่อน controller เพราะ repository ทุกตัวต้องรู้คลังก่อนจะ query
+if (useDatabase) app.UseMiddleware<WarehouseMiddleware>();
 
 app.MapControllers();
 
