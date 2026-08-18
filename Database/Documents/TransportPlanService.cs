@@ -8,15 +8,16 @@ namespace Mammod.Database.Documents;
 /// Orchestration for แผนขนส่ง: open a transaction, take a number, insert the
 /// document, write the audit, commit.
 ///
-/// Create, Update and SetStops are implemented. Issue and Cancel are not, and
-/// Issue in particular stays closed rather than merely unwritten: it cuts a
-/// shipment from a plan, and a shipment that exists but can never be sent — MMX
-/// has no contract yet — is not a document anybody should be able to raise.
+/// Create, Update, SetStops and Cancel are implemented. Issue is not, and
+/// stays closed rather than merely unwritten: it cuts a shipment from a plan,
+/// and a shipment that exists but can never be sent — MMX has no contract yet —
+/// is not a document anybody should be able to raise.
 /// </summary>
 public sealed class TransportPlanService(
     AppDbContext db,
     ITransportPlanRepository plans,
     ITransportPlanPolicy policy,
+    IShipmentRepository shipments,
     IDeliveryOrderQuery orders,
     IDocumentNumberAllocator numbers,
     IDocumentAuditWriter audit,
@@ -459,7 +460,113 @@ public sealed class TransportPlanService(
         throw new NotImplementedException(
             "ยังไม่ได้ย้าย 'ออกใบปิดบรรทุก' มาที่ SQL — รอสัญญา MMX ก่อน");
 
-    public Task<TransportPlanRow> CancelAsync(
-        string planKey, string reason, string ifMatch, CancellationToken ct = default) =>
-        throw new NotImplementedException("ยังไม่ได้ย้าย 'ยกเลิกแผน' มาที่ SQL — ยังใช้ TmsStore");
+    /// <summary>
+    /// Calls a draft plan off and hands everything it was holding back.
+    ///
+    /// <b>Cancelling the lines is not a courtesy — it is the whole operation.</b>
+    /// The pending pool is derived from line status, not from plan status: an
+    /// order is claimed while a line names it and is not CANCELLED, and
+    /// <see cref="DeliveryOrderQuery"/> never looks at the plan the line belongs
+    /// to. Mark the header alone and every order this plan held would be stranded
+    /// permanently — out of the pool, on a plan nobody can use, and invisible to
+    /// the screen that would put them somewhere else.
+    ///
+    /// Draft only, and only while it has issued nothing. A plan that produced a
+    /// manifest is the record of where that document came from, and the document
+    /// outlives it.
+    /// </summary>
+    public async Task<TransportPlanRow> CancelAsync(
+        string planKey, string reason, string ifMatch, CancellationToken ct = default)
+    {
+        var key = (planKey ?? "").Trim();
+        if (key.Length == 0)
+            throw new DomainException("ต้องระบุเลขที่แผนขนส่ง");
+
+        if (!DocumentIdentity.TryReadVersion(ifMatch, out var expected))
+        {
+            throw new DomainException(
+                "ต้องส่ง If-Match พร้อมเวอร์ชันของแผน (currentVersion ที่ได้จากการอ่านล่าสุด) — " +
+                "ไม่งั้นการบันทึกอาจทับสิ่งที่คนอื่นเพิ่งแก้ไป");
+        }
+
+        if (string.IsNullOrWhiteSpace(actor.CurrentUser))
+            throw new InvalidOperationException(
+                "ไม่ทราบผู้ทำรายการ — WarehouseMiddleware ต้องทำงานก่อน controller");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var plan = await plans.GetWithLinesAsync(key, ct)
+            ?? throw DomainException.NotFound($"ไม่พบแผนขนส่ง {key}");
+
+        // The policy asks whether a manifest is already out. Only looked up when
+        // the plan names one — a draft never does, so the common path costs
+        // nothing and the guard is still there if ISSUED ever becomes cancellable.
+        var issued = string.IsNullOrWhiteSpace(plan.ShipmentKey)
+            ? null
+            : await shipments.GetAsync(plan.ShipmentKey, ct);
+
+        var decision = policy.CanCancel(plan, issued);
+        if (!decision.IsAllowed)
+        {
+            throw new DomainException(decision.Message, decision.Kind == RefusalKind.Incomplete
+                ? StatusCodes.Status422UnprocessableEntity
+                : StatusCodes.Status409Conflict);
+        }
+
+        db.Entry(plan).Property(p => p.RowVer).OriginalValue = expected;
+
+        var now = DateTime.UtcNow;
+        var trimmed = (reason ?? "").Trim();
+        var released = plan.Lines
+            .Where(l => l.Status != PlanStatus.Cancelled)
+            .Select(l => l.OrderKey)
+            .OrderBy(o => o, StringComparer.Ordinal)
+            .ToList();
+
+        plan.Status = PlanStatus.Cancelled;
+        plan.CancelReason = trimmed.Length == 0 ? null : trimmed;
+        plan.TotalOrder = 0;
+        plan.EditDate = now;
+        plan.EditWho = actor.CurrentUser;
+
+        // Emptying the plan through the same path SetStops uses, so there is one
+        // definition of what taking an order off a plan does.
+        await plans.ReplaceLinesAsync(key, [], ct);
+
+        await audit.WriteAsync(new DocumentAuditRow
+        {
+            DocumentType = DocumentAuditWriter.PlanDocument,
+            DocumentKey = plan.PlanKey,
+            Action = AuditAction.Cancelled,
+            FromStatus = PlanStatus.Draft,
+            ToStatus = PlanStatus.Cancelled,
+            Reason = plan.CancelReason,
+            Actor = actor.CurrentUser,
+            RequestId = actor.RequestId,
+            ChangedAt = now,
+            // The orders let go, recorded because the plan itself no longer says
+            // what it held: raising it again is decided against the pool as it
+            // stands then, not against a promise made now.
+            Metadata = JsonSerializer.Serialize(new
+            {
+                released,
+                warehouse = warehouse.CurrentWarehouseId,
+            }, AuditJson),
+        }, ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(ct);
+            throw new ConcurrencyConflictException(
+                $"แผนขนส่ง {key} ถูกแก้ไขไปแล้วหลังจากที่คุณเปิดหน้านี้ — โหลดใหม่แล้วลองอีกครั้ง",
+                await CurrentVersionAsync(key, ct));
+        }
+
+        await transaction.CommitAsync(ct);
+        return plan;
+    }
 }

@@ -160,8 +160,33 @@ public sealed class TransportPlansController(
     public ActionResult<PlanIssueResult> Issue(string id) => store.IssuePlan(id);
 
     /// <summary>Drops the plan and returns everything in it to the pending pool.</summary>
+    /// <summary>
+    /// Drops the plan and returns everything in it to the pending pool.
+    ///
+    /// One transaction: the header is called off and every line it holds is
+    /// cancelled together. The pool is derived from line status rather than plan
+    /// status, so marking only the header would strand the orders on a plan
+    /// nobody can use.
+    ///
+    /// <b>If-Match is required.</b> A reason is accepted but optional — this
+    /// route has never collected one, and the body stays optional so it does not
+    /// become required now.
+    /// </summary>
     [HttpPost("{id}/cancel")]
-    public ActionResult<TransportPlan> Cancel(string id) => store.CancelPlan(id);
+    public async Task<ActionResult<TransportPlan>> Cancel(
+        string id,
+        [FromBody] CancelRequest? body,
+        [FromServices] ITransportPlanService? plans,
+        CancellationToken ct)
+    {
+        if (plans is null || reads is null) return store.CancelPlan(id);
+
+        var ifMatch = Request.Headers.IfMatch.ToString();
+        await plans.CancelAsync(id, body?.Reason ?? "", ifMatch, ct);
+
+        var plan = await reads.PlanAsync(id, ct);
+        return plan is null ? NotFound() : plan;
+    }
 
     /// <summary>
     /// Raises a cancelled plan again as a fresh draft carrying the same header
