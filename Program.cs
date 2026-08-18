@@ -66,6 +66,20 @@ if (useDatabase)
     builder.Services.AddScoped<IActorContext>(sp => sp.GetRequiredService<RequestContext>());
     builder.Services.AddScoped<DocumentReadQueries>();
     builder.Services.AddScoped<IDeliveryOrderQuery, DeliveryOrderQuery>();
+
+    // ── เอกสารเขียนลง SQL · the first mutation ──────────────────────────────
+    //
+    // Scoped like everything else here: the repository and the audit writer both
+    // read the warehouse and the actor off the request, and a singleton would
+    // capture whichever request happened to build it first.
+    //
+    // The policy is stateless and has no dependencies, so it could be a
+    // singleton — registered scoped anyway, because a reader should not have to
+    // work out why one line in this block differs from the others.
+    builder.Services.AddScoped<IShipmentPolicy, ShipmentPolicy>();
+    builder.Services.AddScoped<IShipmentRepository, ShipmentRepository>();
+    builder.Services.AddScoped<IDocumentAuditWriter, DocumentAuditWriter>();
+    builder.Services.AddScoped<IShipmentService, ShipmentService>();
 }
 
 builder.Services.AddSingleton(sp => new MasterQueries(

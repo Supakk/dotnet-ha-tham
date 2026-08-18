@@ -122,8 +122,49 @@ public sealed class ManifestsController(TmsStore store, DocumentReadQueries? rea
     public ActionResult<Manifest> Express(string id, [FromBody] ExpressDispatch express) =>
         store.MarkExpress(id, express);
 
+    /// <summary>
+    /// Records the invoice against a ใบปิดบรรทุก. The first mutation served from
+    /// SQL rather than from <see cref="TmsStore"/>.
+    ///
+    /// <b>If-Match is required.</b> The value is the <c>currentVersion</c> the
+    /// client got when it read the document — SQL Server's ROWVER, base64. Sent
+    /// as a header rather than in the body because it is a precondition on the
+    /// request, not part of what is being written, and because there is no body
+    /// here to put it in: invoicing takes no input at all.
+    ///
+    /// The controller does none of the work. It unpacks the header, calls the
+    /// service, and reads the document back through the same projection every
+    /// other endpoint uses so the response is the shape the client already
+    /// knows — now carrying the <b>new</b> version, which is what the next
+    /// mutation has to send.
+    ///
+    /// The store branch is the no-database mode, the same one the reads above
+    /// have. It is not a second write: with a database configured the store is
+    /// never touched here, and without one there is no SQL row to invoice.
+    /// Writing both would leave two accounts of whether the document was billed.
+    /// </summary>
     [HttpPost("{id}/invoice")]
-    public ActionResult<Manifest> Invoice(string id) => store.MarkInvoiced(id);
+    public async Task<ActionResult<Manifest>> Invoice(
+        string id,
+        [FromServices] IShipmentService? shipments,
+        CancellationToken ct)
+    {
+        if (shipments is null || reads is null) return store.MarkInvoiced(id);
+
+        // Passed through as sent — quoting, W/ prefixes and all. Reading it is
+        // DocumentIdentity's job, and a second parser here would be a second
+        // opinion on what counts as a version.
+        var ifMatch = Request.Headers.IfMatch.ToString();
+
+        await shipments.MarkInvoicedAsync(id, ifMatch, ct);
+
+        // Read back rather than mapped from the row the service returned: the
+        // client's Manifest is assembled from four tables, and only this
+        // projection knows how. The commit has happened, so the version it reads
+        // is the one SQL Server just stamped.
+        var manifest = await reads.ManifestAsync(id, ct);
+        return manifest is null ? NotFound() : manifest;
+    }
 
     /// <summary>Splits the stops onto MN-…-1, -2, … Returns both documents, parent first.</summary>
     [HttpPost("{id}/split")]

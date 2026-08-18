@@ -275,6 +275,10 @@ public sealed class DocumentReadQueries(AppDbContext db, IWarehouseContext wareh
         },
         Colour = Palette.RouteColour(Math.Abs(r.ShipmentKey.GetHashCode())),
         Stops = stops,
+        // The token the next mutation has to send back as If-Match. Read here
+        // rather than fetched separately so that the version the client holds is
+        // the version of the row it is looking at, not of a later read.
+        CurrentVersion = DocumentIdentity.EncodeVersion(r.RowVer),
     };
 
     // ── แผนขนส่ง · plans ───────────────────────────────────────────────────
@@ -323,6 +327,7 @@ public sealed class DocumentReadQueries(AppDbContext db, IWarehouseContext wareh
             Note = p.Notes ?? "",
             ManifestId = p.ShipmentKey,
             ManifestNo = p.ShipmentKey,
+            CurrentVersion = DocumentIdentity.EncodeVersion(p.RowVer),
             Stops = [.. byPlan.GetValueOrDefault(p.PlanKey, []).Select(l => new ManifestStop
             {
                 Id = l.OrderKey,

@@ -156,6 +156,16 @@ public sealed class ShipmentRow
     public string? StatusMessage { get; set; }
     public string? CancelReason { get; set; }
 
+    /// <summary>
+    /// When the invoice was raised, and by whom. Deliberately not a status —
+    /// see <see cref="ShipmentStatus"/>: overwriting SENT or COMPLETED with an
+    /// INVOICED stage would destroy the answer to "did this load arrive". A
+    /// shipment can be both delivered and invoiced, and these two columns are
+    /// how it says so.
+    /// </summary>
+    public DateTime? InvoicedAt { get; set; }
+    public string? InvoicedBy { get; set; }
+
     public DateTime AddDate { get; set; }
     public string? AddWho { get; set; }
     public DateTime? EditDate { get; set; }
@@ -390,25 +400,29 @@ public sealed class ShipmentSendAttemptRow
 /// </summary>
 public sealed class DocumentAuditRow
 {
-    public int SerialKey { get; set; }
+    /// <summary>AUDITID — bigint IDENTITY, filled in by the database.</summary>
+    public long AuditId { get; set; }
+
     public string WhseId { get; set; } = "";
 
-    /// <summary>PLAN | SHIPMENT.</summary>
-    public string EntityType { get; set; } = "";
+    /// <summary>PLAN | SHIPMENT | SEND_ATTEMPT — CK_TMS_DOCUMENT_AUDIT_TYPE.</summary>
+    public string DocumentType { get; set; } = "";
 
-    /// <summary>PLANKEY or SHIPMENTKEY — the business key, not SERIALKEY.</summary>
-    public string EntityKey { get; set; } = "";
+    /// <summary>PLANKEY or SHIPMENTKEY — the business key, not a surrogate.</summary>
+    public string DocumentKey { get; set; } = "";
 
     public string Action { get; set; } = "";
     public string? FromStatus { get; set; }
     public string? ToStatus { get; set; }
 
-    public string? PerformedBy { get; set; }
-    public DateTime PerformedAt { get; set; }
-
     public string? Reason { get; set; }
     public string? RequestId { get; set; }
     public string? ExternalReference { get; set; }
+
+    /// <summary>NOT NULL in the table — every row says who.</summary>
+    public string Actor { get; set; } = "";
+
+    public DateTime ChangedAt { get; set; }
 
     /// <summary>JSON. For anything that does not deserve a column of its own.</summary>
     public string? Metadata { get; set; }

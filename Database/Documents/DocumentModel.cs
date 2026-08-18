@@ -142,6 +142,8 @@ public static class DocumentModel
             e.Property(x => x.SentDate).HasColumnName("SENTDATE");
             e.Property(x => x.StatusMessage).HasColumnName("STATUSMESSAGE");
             e.Property(x => x.CancelReason).HasColumnName("CANCELREASON");
+            e.Property(x => x.InvoicedAt).HasColumnName("INVOICEDAT");
+            e.Property(x => x.InvoicedBy).HasColumnName("INVOICEDBY");
             e.Property(x => x.AddDate).HasColumnName("ADDDATE");
             e.Property(x => x.AddWho).HasColumnName("ADDWHO");
             e.Property(x => x.EditDate).HasColumnName("EDITDATE");
@@ -352,26 +354,34 @@ public static class DocumentModel
             e.HasIndex(x => x.IdempotencyKey).IsUnique();
         });
 
+        // Mapped against the table migration 005 created, column for column. The
+        // first version of this block was written from the contract rather than
+        // from the script and named five columns that do not exist — SERIALKEY,
+        // ENTITYTYPE, ENTITYKEY, PERFORMEDBY, PERFORMEDAT. Nothing had queried
+        // the table yet, so nothing failed; the first audit insert would have.
         b.Entity<DocumentAuditRow>(e =>
         {
             e.ToTable("TMS_DOCUMENT_AUDIT");
-            e.HasKey(x => x.SerialKey);
+            e.HasKey(x => x.AuditId);
 
-            e.Property(x => x.SerialKey).HasColumnName("SERIALKEY").ValueGeneratedOnAdd();
+            e.Property(x => x.AuditId).HasColumnName("AUDITID").ValueGeneratedOnAdd();
             e.Property(x => x.WhseId).HasColumnName("WHSEID");
-            e.Property(x => x.EntityType).HasColumnName("ENTITYTYPE");
-            e.Property(x => x.EntityKey).HasColumnName("ENTITYKEY");
+            e.Property(x => x.DocumentType).HasColumnName("DOCUMENTTYPE");
+            e.Property(x => x.DocumentKey).HasColumnName("DOCUMENTKEY");
             e.Property(x => x.Action).HasColumnName("ACTION");
             e.Property(x => x.FromStatus).HasColumnName("FROMSTATUS");
             e.Property(x => x.ToStatus).HasColumnName("TOSTATUS");
-            e.Property(x => x.PerformedBy).HasColumnName("PERFORMEDBY");
-            e.Property(x => x.PerformedAt).HasColumnName("PERFORMEDAT");
             e.Property(x => x.Reason).HasColumnName("REASON");
             e.Property(x => x.RequestId).HasColumnName("REQUESTID");
             e.Property(x => x.ExternalReference).HasColumnName("EXTERNALREFERENCE");
+            e.Property(x => x.Actor).HasColumnName("ACTOR");
+            // datetime2(3) in the table; letting EF send the default datetime2(7)
+            // precision would round-trip a value the column cannot hold exactly.
+            e.Property(x => x.ChangedAt).HasColumnName("CHANGEDAT").HasColumnType("datetime2(3)");
             e.Property(x => x.Metadata).HasColumnName("METADATA");
 
-            e.HasIndex(x => new { x.WhseId, x.EntityType, x.EntityKey, x.PerformedAt });
+            e.HasIndex(x => new { x.WhseId, x.DocumentType, x.DocumentKey, x.ChangedAt })
+                .HasDatabaseName("IX_TMS_DOCUMENT_AUDIT_DOC");
         });
 
         b.Entity<DocumentNumberRow>(e =>

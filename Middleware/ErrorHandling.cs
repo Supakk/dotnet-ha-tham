@@ -37,6 +37,17 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         {
             await next(context);
         }
+        catch (ConcurrencyConflictException error)
+        {
+            // 409, and the body carries the version the database holds now — see
+            // ConcurrencyConflictException. Handled here rather than in the
+            // controller so every mutation answers a stale If-Match the same
+            // way, and so there is still exactly one place that turns an
+            // exception into a response body.
+            logger.LogInformation("ชนกันที่ {Method} {Path}: {Message}",
+                context.Request.Method, context.Request.Path, error.Message);
+            await Write(context, StatusCodes.Status409Conflict, error.Message, error.CurrentVersion);
+        }
         catch (DomainException error)
         {
             logger.LogInformation("ปฏิเสธคำขอ {Method} {Path}: {Message}",
@@ -52,7 +63,13 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         }
     }
 
-    private static async Task Write(HttpContext context, int status, string message)
+    /// <summary>
+    /// <paramref name="currentVersion"/> is written only when there is one, so
+    /// the ordinary refusal body stays exactly <c>{ "message": … }</c> and no
+    /// existing client sees a shape it has not been read against.
+    /// </summary>
+    private static async Task Write(
+        HttpContext context, int status, string message, string? currentVersion = null)
     {
         // A response already on its way cannot be replaced with an error body; all
         // that is left is to let it fail rather than throw a second time here.
@@ -61,6 +78,11 @@ public sealed class ErrorHandlingMiddleware(RequestDelegate next, ILogger<ErrorH
         context.Response.Clear();
         context.Response.StatusCode = status;
         context.Response.ContentType = "application/json; charset=utf-8";
-        await context.Response.WriteAsync(JsonSerializer.Serialize(new { message }, Json));
+
+        var body = currentVersion is null
+            ? JsonSerializer.Serialize(new { message }, Json)
+            : JsonSerializer.Serialize(new { message, currentVersion }, Json);
+
+        await context.Response.WriteAsync(body);
     }
 }

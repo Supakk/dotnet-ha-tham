@@ -11,10 +11,18 @@ namespace Mammod.Database;
 /// against the real column names by hand — the ER diagram gets several of them
 /// wrong (README section 0), so guessing is not an option.
 ///
-/// Everything is <c>AsNoTracking</c> by default: this context answers GETs. The
-/// writes still go through the in-memory stores, which own the business rules,
-/// and moving those across is a separate job that needs transactions to keep
-/// "an order is in one place only" true under concurrent requests.
+/// Everything is <c>AsNoTracking</c> by default: this context began as one that
+/// answered GETs and nothing else. The document writes are moving across one
+/// mutation at a time — invoicing is the first — and each of those has to ask
+/// for tracking explicitly with <c>AsTracking()</c>, as
+/// <see cref="Documents.ShipmentRepository"/> does. Miss it and the mutation
+/// silently writes nothing: <c>SaveChanges</c> has no entry to work from and
+/// says so by doing nothing at all.
+///
+/// The rest of the writes still go through the in-memory stores, which own the
+/// business rules, and moving those across is a separate job that needs
+/// transactions to keep "an order is in one place only" true under concurrent
+/// requests.
 ///
 /// Names are the legacy ones — <c>WHSEID</c>, <c>TRANSPORTERKEY</c>,
 /// <c>PUTAWAYZONE</c> — spelled exactly as the database has them rather than
@@ -36,8 +44,8 @@ public sealed class AppDbContext(DbContextOptions<AppDbContext> options) : DbCon
     public DbSet<DeliveryOrderRow> DeliveryOrders => Set<DeliveryOrderRow>();
 
     protected override void OnConfiguring(DbContextOptionsBuilder builder) =>
-        // A read-only context that tracked entities would spend memory building
-        // change-tracking state nothing ever reads.
+        // Reads are the overwhelming majority and none of them want change
+        // tracking. The mutations opt in per query — see the note above.
         builder.UseQueryTrackingBehavior(QueryTrackingBehavior.NoTracking);
 
     protected override void OnModelCreating(ModelBuilder b)

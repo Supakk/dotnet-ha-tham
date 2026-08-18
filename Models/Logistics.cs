@@ -171,6 +171,16 @@ public sealed record Manifest
     public List<ManifestStop> Stops { get; init; } = [];
 
     /// <summary>
+    /// The row's concurrency token as base64 — SQL Server's ROWVER, not a
+    /// counter. The client sends it straight back as <c>If-Match</c> on the next
+    /// mutation, and the response to that mutation carries the new one.
+    ///
+    /// Empty when the document was not read from SQL (the in-memory seed), which
+    /// is the honest answer: there is no row to have a version of.
+    /// </summary>
+    public string CurrentVersion { get; init; } = "";
+
+    /// <summary>
     /// The confirm gate. A manifest cut from a plan has no truck yet; confirming
     /// one would hand the warehouse a document nobody can drive. Enforced here as
     /// well as on the client's button — a disabled button is not a rule.
@@ -239,6 +249,16 @@ public sealed record TransportPlan
 
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ManifestNo { get; init; }
+
+    /// <summary>
+    /// The row's concurrency token as base64 — SQL Server's ROWVER, not a
+    /// counter. The client sends it straight back as <c>If-Match</c> on the next
+    /// mutation, and the response to that mutation carries the new one.
+    ///
+    /// Empty when the document was not read from SQL (the in-memory seed), which
+    /// is the honest answer: there is no row to have a version of.
+    /// </summary>
+    public string CurrentVersion { get; init; } = "";
 }
 
 public sealed record IntegrationMessage
