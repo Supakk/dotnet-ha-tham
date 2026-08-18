@@ -81,6 +81,8 @@ if (useDatabase)
     // open rather than owning one. Scoped so it shares the request's DbContext,
     // which is what makes that possible.
     builder.Services.AddScoped<IDocumentNumberAllocator, DocumentNumberAllocator>();
+    builder.Services.AddScoped<ITransportPlanRepository, TransportPlanRepository>();
+    builder.Services.AddScoped<ITransportPlanService, TransportPlanService>();
     builder.Services.AddScoped<IShipmentPolicy, ShipmentPolicy>();
     builder.Services.AddScoped<IShipmentRepository, ShipmentRepository>();
     builder.Services.AddScoped<IDocumentAuditWriter, DocumentAuditWriter>();

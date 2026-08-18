@@ -41,9 +41,57 @@ public sealed class TransportPlansController(
         return plan is null ? NotFound() : plan;
     }
 
+    /// <summary>
+    /// Raises a draft plan, numbered from the global counter.
+    ///
+    /// The plan is a header only — a delivery date and a route. What it will
+    /// carry arrives through <c>PUT {id}/stops</c>, because an order can sit on
+    /// one live plan at a time and deciding that is its own transaction.
+    ///
+    /// <b>The warehouse in the body is ignored.</b> It comes from
+    /// <c>X-Warehouse-Id</c> by way of the request context, and nowhere else: a
+    /// document filed against a site the caller merely claimed is exactly the
+    /// hole the header exists to close. The field stays on the DTO because the
+    /// no-database path still reads it.
+    ///
+    /// The store branch is that no-database mode. With a database configured the
+    /// store is never written here, so there is only ever one record of a plan.
+    /// </summary>
     [HttpPost]
-    public ActionResult<TransportPlan> Create([FromBody] TransportPlanInput input) =>
-        store.CreatePlan(input);
+    public async Task<ActionResult<TransportPlan>> Create(
+        [FromBody] TransportPlanInput input,
+        [FromServices] ITransportPlanService? plans,
+        CancellationToken ct)
+    {
+        if (plans is null || reads is null) return store.CreatePlan(input);
+
+        var created = await plans.CreateAsync(ToHeader(input), ct);
+
+        // Read back through the same projection every other endpoint uses, so
+        // the response is the shape the client already knows — carrying the
+        // currentVersion the next mutation will have to send.
+        var plan = await reads.PlanAsync(created.PlanKey, ct);
+        return plan is null ? NotFound() : plan;
+    }
+
+    /// <summary>
+    /// The client's shape into the service's. Two conversions, both of which
+    /// exist because the wire format was fixed before the database was:
+    /// <c>rt-RT-NORTH-01</c> carries a prefix the read path adds for the client's
+    /// benefit, and the delivery date travels as a plain string.
+    /// </summary>
+    private static PlanHeaderInput ToHeader(TransportPlanInput input)
+    {
+        var routeId = (input?.RouteId ?? "").Trim();
+        var routeCode = routeId.StartsWith("rt-", StringComparison.OrdinalIgnoreCase)
+            ? routeId[3..]
+            : routeId;
+
+        if (!DateOnly.TryParse(input?.DeliveryDate, out var deliveryDate))
+            throw new DomainException("วันที่ส่งไม่ถูกต้อง — ต้องเป็นรูปแบบ YYYY-MM-DD");
+
+        return new PlanHeaderInput(deliveryDate, routeCode, input?.Note);
+    }
 
     [HttpPut("{id}")]
     public ActionResult<TransportPlan> Update(string id, [FromBody] TransportPlanInput input) =>
