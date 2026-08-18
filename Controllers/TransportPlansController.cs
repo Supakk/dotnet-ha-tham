@@ -1,3 +1,4 @@
+using System.Globalization;
 using Mammod.Data;
 using Mammod.Database.Documents;
 using Mammod.Dtos;
@@ -87,15 +88,51 @@ public sealed class TransportPlansController(
             ? routeId[3..]
             : routeId;
 
-        if (!DateOnly.TryParse(input?.DeliveryDate, out var deliveryDate))
+        // Exact, and deliberately not DateOnly.TryParse. The loose parser is
+        // culture-dependent: it reads "11/09/2026" happily and silently decides
+        // whether that is September or November. A delivery date two months out
+        // is not a parse error anyone would notice — it is a lorry sent on the
+        // wrong day — and the contract has always said YYYY-MM-DD.
+        if (!DateOnly.TryParseExact(
+                input?.DeliveryDate, "yyyy-MM-dd",
+                CultureInfo.InvariantCulture, DateTimeStyles.None, out var deliveryDate))
+        {
             throw new DomainException("วันที่ส่งไม่ถูกต้อง — ต้องเป็นรูปแบบ YYYY-MM-DD");
+        }
 
         return new PlanHeaderInput(deliveryDate, routeCode, input?.Note);
     }
 
+    /// <summary>
+    /// Edits a draft plan's header — delivery date, route and note.
+    ///
+    /// <b>If-Match is required.</b> The value is the <c>currentVersion</c> the
+    /// client read off the plan; two dispatchers with the same plan open would
+    /// otherwise overwrite one another, and the second edit would win silently.
+    ///
+    /// What the plan is holding is not changed here — that is <c>{id}/stops</c>.
+    /// The warehouse in the body is ignored on the SQL path for the same reason
+    /// it is on create.
+    /// </summary>
     [HttpPut("{id}")]
-    public ActionResult<TransportPlan> Update(string id, [FromBody] TransportPlanInput input) =>
-        store.UpdatePlan(id, input);
+    public async Task<ActionResult<TransportPlan>> Update(
+        string id,
+        [FromBody] TransportPlanInput input,
+        [FromServices] ITransportPlanService? plans,
+        CancellationToken ct)
+    {
+        if (plans is null || reads is null) return store.UpdatePlan(id, input);
+
+        // Passed through as sent — quoting and W/ prefixes included. Reading it
+        // is DocumentIdentity's job; a second parser here would be a second
+        // opinion on what counts as a version.
+        var ifMatch = Request.Headers.IfMatch.ToString();
+
+        await plans.UpdateAsync(id, ToHeader(input), ifMatch, ct);
+
+        var plan = await reads.PlanAsync(id, ct);
+        return plan is null ? NotFound() : plan;
+    }
 
     /// <summary>
     /// Replaces the plan's contents with exactly these orders — the tick-boxes on
