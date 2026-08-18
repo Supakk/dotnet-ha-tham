@@ -164,6 +164,16 @@ public sealed class ShipmentRow
     public string? CancelReason { get; set; }
 
     /// <summary>
+    /// The soft delete, kept apart from cancellation on purpose — migration 003
+    /// says why: a delete removes a document raised by mistake, a cancellation
+    /// is a business decision with a reason attached, and reporting that cannot
+    /// tell them apart overstates how often runs are called off.
+    /// </summary>
+    public DateTime? DeletedDate { get; set; }
+    public string? DeletedBy { get; set; }
+    public string? DeleteReason { get; set; }
+
+    /// <summary>
     /// When the invoice was raised, and by whom. Deliberately not a status —
     /// see <see cref="ShipmentStatus"/>: overwriting SENT or COMPLETED with an
     /// INVOICED stage would destroy the answer to "did this load arrive". A

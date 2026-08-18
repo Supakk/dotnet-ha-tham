@@ -133,12 +133,34 @@ public sealed class ManifestsController(TmsStore store, DocumentReadQueries? rea
         store.CancelManifest(id, body?.Reason ?? "");
 
     /// <summary>
-    /// Removes a cancelled document outright. Cancel first: that is what returns
-    /// the load and records the reason, and a plan that issued this one goes back
-    /// to being a draft rather than pointing at a number that is gone.
+    /// Removes a cancelled document. Cancel first: that is what returns the load
+    /// and records the reason, and a plan that issued this one goes back to
+    /// being a draft rather than pointing at a number that is gone.
+    ///
+    /// <b>A soft delete</b> — STATUS becomes DELETED and the row stays, out of
+    /// every list. <b>If-Match is required</b>, as on confirm and invoice.
+    /// Answers 204, the convention this route has always used.
     /// </summary>
     [HttpDelete("{id}")]
-    public IActionResult Delete(string id) { store.DeleteManifest(id); return NoContent(); }
+    public async Task<IActionResult> Delete(
+        string id,
+        [FromServices] IShipmentService? shipments,
+        CancellationToken ct)
+    {
+        if (shipments is null || reads is null) { store.DeleteManifest(id); return NoContent(); }
+
+        var ifMatch = Request.Headers.IfMatch.ToString();
+
+        // No reason is collected here: DELETE carries no body in this API, and
+        // the reason that matters was recorded when the document was cancelled,
+        // which is the only state this is reachable from. DELETEREASON stays
+        // null rather than being filled with something invented.
+        await shipments.DeleteAsync(id, null, ifMatch, ct);
+
+        // 204, as before. The document is gone from every list and no further
+        // mutation is owed on it, so there is no version left to hand back.
+        return NoContent();
+    }
 
     [HttpPost("{id}/express")]
     public ActionResult<Manifest> Express(string id, [FromBody] ExpressDispatch express) =>

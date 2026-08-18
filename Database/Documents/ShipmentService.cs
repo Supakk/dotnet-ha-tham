@@ -20,6 +20,7 @@ namespace Mammod.Database.Documents;
 public sealed class ShipmentService(
     AppDbContext db,
     IShipmentRepository shipments,
+    ITransportPlanRepository plans,
     IShipmentPolicy policy,
     IDocumentAuditWriter audit,
     IWarehouseContext warehouse,
@@ -245,6 +246,126 @@ public sealed class ShipmentService(
     }
 
     /// <summary>
+    /// Removes a cancelled ใบปิดบรรทุก — the one raised by mistake.
+    ///
+    /// <b>A soft delete.</b> STATUS becomes DELETED and the row stays where it
+    /// is; the list already excludes it. Nothing is cleared: the confirm stamp,
+    /// the cancellation reason, the invoice fields and the whole stop and order
+    /// graph are exactly what they were, because the point of keeping the row is
+    /// to still be able to answer what the document said.
+    ///
+    /// Cancelled only. Cancelling is what returns the load and records why, and
+    /// a document anyone downstream saw should carry that reason rather than
+    /// vanish; this is for tidying up afterwards, not for skipping the step.
+    ///
+    /// <b>The plan that issued it is handed back.</b> A plan pointing at a
+    /// number that is no longer there would offer to open nothing, so it returns
+    /// to being a draft. It comes back empty — the load went to the pool when
+    /// the document was cancelled, not to the plan — and re-picking it is the
+    /// planner's call, which is where they were before issuing. Guarded on the
+    /// plan still pointing at <i>this</i> document: after a reissue it names a
+    /// newer one, and that one is still live.
+    /// </summary>
+    public async Task<ShipmentRow> DeleteAsync(
+        string shipmentKey, string? reason, string ifMatch, CancellationToken ct = default)
+    {
+        var key = (shipmentKey ?? "").Trim();
+        if (key.Length == 0)
+            throw new DomainException("ต้องระบุเลขที่ใบปิดบรรทุก");
+
+        if (!DocumentIdentity.TryReadVersion(ifMatch, out var expected))
+        {
+            throw new DomainException(
+                "ต้องส่ง If-Match พร้อมเวอร์ชันของเอกสาร (currentVersion ที่ได้จากการอ่านล่าสุด) — " +
+                "ไม่งั้นการบันทึกอาจทับสิ่งที่คนอื่นเพิ่งแก้ไป");
+        }
+
+        if (string.IsNullOrWhiteSpace(actor.CurrentUser))
+            throw new InvalidOperationException(
+                "ไม่ทราบผู้ทำรายการ — WarehouseMiddleware ต้องทำงานก่อน controller");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var shipment = await shipments.GetAsync(key, ct)
+            ?? throw DomainException.NotFound($"ไม่พบใบปิดบรรทุก {key}");
+
+        var decision = policy.CanDelete(shipment);
+        if (!decision.IsAllowed)
+        {
+            throw new DomainException(decision.Message, decision.Kind == RefusalKind.Incomplete
+                ? StatusCodes.Status422UnprocessableEntity
+                : StatusCodes.Status409Conflict);
+        }
+
+        db.Entry(shipment).Property(s => s.RowVer).OriginalValue = expected;
+
+        var now = DateTime.UtcNow;
+        var from = shipment.Status;
+
+        shipment.Status = ShipmentStatus.Deleted;
+        shipment.DeletedDate = now;
+        shipment.DeletedBy = actor.CurrentUser;
+        if (!string.IsNullOrWhiteSpace(reason)) shipment.DeleteReason = reason.Trim();
+
+        // The same canonical lifecycle record Confirm writes. No stop, detail or
+        // detail-line row is touched here — the load left when the document was
+        // cancelled, and nothing about deleting it moves an order.
+        db.Set<ShipmentStatusLogRow>().Add(new ShipmentStatusLogRow
+        {
+            WhseId = warehouse.CurrentWarehouseId,
+            ShipmentKey = shipment.ShipmentKey,
+            FromStatus = from,
+            ToStatus = ShipmentStatus.Deleted,
+            SourceSystem = "TMS",
+            ChangeDate = now,
+            ChangeWho = actor.CurrentUser,
+        });
+
+        await HandPlanBackAsync(shipment, now, ct);
+
+        try
+        {
+            // One call: the header, its log row and the plan hand-back go as one
+            // batch. A plan left ISSUED against a deleted number is the exact
+            // state this must never commit half of.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(ct);
+            throw new ConcurrencyConflictException(
+                $"ใบปิดบรรทุก {key} ถูกแก้ไขไปแล้วหลังจากที่คุณเปิดหน้านี้ — โหลดใหม่แล้วลองอีกครั้ง",
+                await CurrentVersionAsync(key, ct));
+        }
+
+        await transaction.CommitAsync(ct);
+        return shipment;
+    }
+
+    /// <summary>
+    /// Returns the issuing plan to draft, if it is still pointing at this
+    /// document. Loaded through the plan repository so it is warehouse-scoped by
+    /// the same rule everything else is.
+    /// </summary>
+    private async Task HandPlanBackAsync(ShipmentRow shipment, DateTime now, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(shipment.PlanKey)) return;
+
+        var plan = await plans.GetAsync(shipment.PlanKey, ct);
+        if (plan is null) return;
+
+        // Only if it still names this one. A reissue repoints the plan at the
+        // replacement, and deleting the old document must not drag the plan off
+        // a manifest that is still live.
+        if (!string.Equals(plan.ShipmentKey, shipment.ShipmentKey, StringComparison.Ordinal)) return;
+
+        plan.Status = PlanStatus.Draft;
+        plan.ShipmentKey = null;
+        plan.EditDate = now;
+        plan.EditWho = actor.CurrentUser;
+    }
+
+    /// <summary>
     /// The version the database holds now, read after the failed write has been
     /// rolled back.
     ///
@@ -288,10 +409,6 @@ public sealed class ShipmentService(
     public Task<ShipmentRow> CancelAsync(
         string shipmentKey, string reason, string ifMatch, CancellationToken ct = default) =>
         throw new NotImplementedException("ยังไม่ได้ย้าย 'ยกเลิก' มาที่ SQL — ยังใช้ TmsStore");
-
-    public Task<ShipmentRow> DeleteAsync(
-        string shipmentKey, string? reason, string ifMatch, CancellationToken ct = default) =>
-        throw new NotImplementedException("ยังไม่ได้ย้าย 'ลบ' มาที่ SQL — ยังใช้ TmsStore");
 
     public Task<ReissueResult> ReissueAsync(string shipmentKey, CancellationToken ct = default) =>
         throw new NotImplementedException("ยังไม่ได้ย้าย 'ออกใบใหม่' มาที่ SQL — ยังใช้ TmsStore");

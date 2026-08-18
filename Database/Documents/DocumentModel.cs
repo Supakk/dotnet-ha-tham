@@ -146,6 +146,9 @@ public static class DocumentModel
             e.Property(x => x.SentDate).HasColumnName("SENTDATE");
             e.Property(x => x.StatusMessage).HasColumnName("STATUSMESSAGE");
             e.Property(x => x.CancelReason).HasColumnName("CANCELREASON");
+            e.Property(x => x.DeletedDate).HasColumnName("DELETEDDATE");
+            e.Property(x => x.DeletedBy).HasColumnName("DELETEDBY");
+            e.Property(x => x.DeleteReason).HasColumnName("DELETEREASON");
             e.Property(x => x.InvoicedAt).HasColumnName("INVOICEDAT");
             e.Property(x => x.InvoicedBy).HasColumnName("INVOICEDBY");
             e.Property(x => x.AddDate).HasColumnName("ADDDATE");
