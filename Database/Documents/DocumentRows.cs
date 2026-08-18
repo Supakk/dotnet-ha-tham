@@ -487,20 +487,36 @@ public sealed class DocumentAuditRow
 /// <summary>
 /// TMS_DOCUMENT_NUMBER — the counter behind MN-YYYYMM-NNNN and PL-YYYYMM-NNNN.
 ///
-/// A row per (warehouse, prefix, period) so numbering restarts each month and
-/// two warehouses never contend for the same row. Allocation must happen inside
-/// the caller's transaction — see <c>IDocumentNumberAllocator</c>.
+/// <b>A row per (prefix, period). Not per warehouse.</b> This entity used to
+/// carry a WHSEID and key on it; the table has no such column and never did.
+/// The number series runs continuously across all three sites —
+///
+///     MN-202608-0039  WWP
+///     MN-202608-0040  WPD
+///     MN-202608-0041  WSK
+///     MN-202608-0042  WPD
+///     MN-202608-0043  WSK
+///
+/// — and <c>UQ_DOC_SHIPMENT_HDR_KEY</c> is unique on SHIPMENTKEY alone, so a
+/// per-warehouse counter is not merely unintended: it would hand WSK and WPD
+/// the same MN-202608-0044 and the second insert would be refused. The
+/// warehouse is context for an allocation, never part of its uniqueness.
+///
+/// Numbering restarts each month because PERIOD is part of the key, not because
+/// anything resets it.
+///
+/// Allocation must happen inside the caller's transaction — see
+/// <see cref="IDocumentNumberAllocator"/>.
 /// </summary>
 public sealed class DocumentNumberRow
 {
-    public string WhseId { get; set; } = "";
-
-    /// <summary>MN | PL.</summary>
+    /// <summary>MN | PL — CK_TMS_DOCUMENT_NUMBER_PREFIX.</summary>
     public string Prefix { get; set; } = "";
 
-    /// <summary>YYYYMM.</summary>
+    /// <summary>YYYYMM — CK_TMS_DOCUMENT_NUMBER_PERIOD.</summary>
     public string Period { get; set; } = "";
 
+    /// <summary>The last number handed out; the next allocation is this plus one.</summary>
     public int LastNumber { get; set; }
 
     public byte[]? RowVer { get; set; }

@@ -409,9 +409,11 @@ public static class DocumentModel
         b.Entity<DocumentNumberRow>(e =>
         {
             e.ToTable("TMS_DOCUMENT_NUMBER");
-            e.HasKey(x => new { x.WhseId, x.Prefix, x.Period });
 
-            e.Property(x => x.WhseId).HasColumnName("WHSEID");
+            // (PREFIX, PERIOD) — PK_TMS_DOCUMENT_NUMBER. There is no WHSEID on
+            // this table; see DocumentNumberRow for why there must not be.
+            e.HasKey(x => new { x.Prefix, x.Period });
+
             e.Property(x => x.Prefix).HasColumnName("PREFIX");
             e.Property(x => x.Period).HasColumnName("PERIOD");
             e.Property(x => x.LastNumber).HasColumnName("LASTNUMBER");

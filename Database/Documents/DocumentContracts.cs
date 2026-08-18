@@ -252,6 +252,13 @@ public interface IShipmentSendAttemptRepository
 /// is an interface over a table rather than a counter in the process — a static
 /// field cannot survive a restart, and <c>MAX(number)+1</c> cannot survive two
 /// requests.
+///
+/// <b>The series is global, not per warehouse.</b> One counter row per
+/// (prefix, period) serves every site, which is why there is no warehouse
+/// parameter below and why there must not be one: the number alone identifies
+/// the document, on the wire and on the paperwork, and
+/// <c>UQ_DOC_SHIPMENT_HDR_KEY</c> enforces that. See
+/// <see cref="DocumentNumberRow"/>.
 /// </summary>
 public interface IDocumentNumberAllocator
 {
