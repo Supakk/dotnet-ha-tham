@@ -154,6 +154,97 @@ public sealed class ShipmentService(
     };
 
     /// <summary>
+    /// ร่าง → ยืนยันแล้ว. Draft to confirmed: the document is now final on the
+    /// TMS side, and the warehouse can load against it.
+    ///
+    /// A pure header transition — the stops, the orders and their lines are
+    /// exactly what they were. What changes is the status, when it was confirmed
+    /// and by whom.
+    ///
+    /// <b>The status change is recorded in DOC_SHIPMENT_STATUS_LOG, not in
+    /// TMS_DOCUMENT_AUDIT.</b> That is the split the schema already draws and the
+    /// existing rows already follow: fourteen of them, and two are this very
+    /// transition written as <c>DRAFT → CONFIRMED, TMS</c>. The audit table
+    /// deliberately does not copy shipment transitions — writing both would
+    /// leave two accounts of one event, free to disagree.
+    /// </summary>
+    public async Task<ShipmentRow> ConfirmAsync(
+        string shipmentKey, string ifMatch, CancellationToken ct = default)
+    {
+        var key = (shipmentKey ?? "").Trim();
+        if (key.Length == 0)
+            throw new DomainException("ต้องระบุเลขที่ใบปิดบรรทุก");
+
+        if (!DocumentIdentity.TryReadVersion(ifMatch, out var expected))
+        {
+            throw new DomainException(
+                "ต้องส่ง If-Match พร้อมเวอร์ชันของเอกสาร (currentVersion ที่ได้จากการอ่านล่าสุด) — " +
+                "ไม่งั้นการบันทึกอาจทับสิ่งที่คนอื่นเพิ่งแก้ไป");
+        }
+
+        if (string.IsNullOrWhiteSpace(actor.CurrentUser))
+            throw new InvalidOperationException(
+                "ไม่ทราบผู้ทำรายการ — WarehouseMiddleware ต้องทำงานก่อน controller");
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var shipment = await shipments.GetAsync(key, ct)
+            ?? throw DomainException.NotFound($"ไม่พบใบปิดบรรทุก {key}");
+
+        // Draft, and assigned. The policy answers both — an unassigned draft is
+        // Incomplete rather than WrongState, which is why the two map to
+        // different status codes.
+        var decision = policy.CanConfirm(shipment);
+        if (!decision.IsAllowed)
+        {
+            throw new DomainException(decision.Message, decision.Kind == RefusalKind.Incomplete
+                ? StatusCodes.Status422UnprocessableEntity
+                : StatusCodes.Status409Conflict);
+        }
+
+        db.Entry(shipment).Property(s => s.RowVer).OriginalValue = expected;
+
+        var now = DateTime.UtcNow;
+        var from = shipment.Status;
+
+        shipment.Status = ShipmentStatus.Confirmed;
+        shipment.ConfirmDate = now;
+        shipment.ConfirmBy = actor.CurrentUser;
+
+        // Written straight through the context rather than behind a writer of its
+        // own: there is no contract for the status log the way there is for the
+        // audit, and inventing one to hold four lines would be an abstraction
+        // nothing else asked for. SOURCESYSTEM is TMS because this transition is
+        // ours — MMX and WMS write their own.
+        db.Set<ShipmentStatusLogRow>().Add(new ShipmentStatusLogRow
+        {
+            WhseId = warehouse.CurrentWarehouseId,
+            ShipmentKey = shipment.ShipmentKey,
+            FromStatus = from,
+            ToStatus = ShipmentStatus.Confirmed,
+            SourceSystem = "TMS",
+            ChangeDate = now,
+            ChangeWho = actor.CurrentUser,
+        });
+
+        try
+        {
+            // One call: the header and its log row go as one batch.
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(ct);
+            throw new ConcurrencyConflictException(
+                $"ใบปิดบรรทุก {key} ถูกแก้ไขไปแล้วหลังจากที่คุณเปิดหน้านี้ — โหลดใหม่แล้วลองอีกครั้ง",
+                await CurrentVersionAsync(key, ct));
+        }
+
+        await transaction.CommitAsync(ct);
+        return shipment;
+    }
+
+    /// <summary>
     /// The version the database holds now, read after the failed write has been
     /// rolled back.
     ///
@@ -187,9 +278,6 @@ public sealed class ShipmentService(
     public Task<ShipmentRow> UpdateAsync(
         string shipmentKey, ShipmentHeaderInput input, string ifMatch, CancellationToken ct = default) =>
         throw new NotImplementedException("ยังไม่ได้ย้าย 'แก้ไขใบปิดบรรทุก' มาที่ SQL — ยังใช้ TmsStore");
-
-    public Task<ShipmentRow> ConfirmAsync(string shipmentKey, string ifMatch, CancellationToken ct = default) =>
-        throw new NotImplementedException("ยังไม่ได้ย้าย 'ยืนยัน' มาที่ SQL — ยังใช้ TmsStore");
 
     public Task<ShipmentRow> SendAsync(string shipmentKey, string ifMatch, CancellationToken ct = default) =>
         throw new NotImplementedException("ยังไม่ได้ย้าย 'ส่งให้ MMX' มาที่ SQL — ยังใช้ TmsStore");

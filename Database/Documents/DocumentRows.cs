@@ -150,6 +150,13 @@ public sealed class ShipmentRow
     public string? ExpressApprover { get; set; }
 
     public DateTime? ConfirmDate { get; set; }
+
+    /// <summary>
+    /// CONFIRMBY — who confirmed it. Added by migration 003 for exactly this:
+    /// CONFIRMDATE already existed, but who did it did not.
+    /// </summary>
+    public string? ConfirmBy { get; set; }
+
     public DateTime? SentDate { get; set; }
 
     /// <summary>What MMX last said. Cleared on a retry.</summary>

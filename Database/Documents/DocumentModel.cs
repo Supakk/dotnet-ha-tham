@@ -142,6 +142,7 @@ public static class DocumentModel
             e.Property(x => x.ExpressRequester).HasColumnName("EXPRESS_REQUESTER");
             e.Property(x => x.ExpressApprover).HasColumnName("EXPRESS_APPROVER");
             e.Property(x => x.ConfirmDate).HasColumnName("CONFIRMDATE");
+            e.Property(x => x.ConfirmBy).HasColumnName("CONFIRMBY");
             e.Property(x => x.SentDate).HasColumnName("SENTDATE");
             e.Property(x => x.StatusMessage).HasColumnName("STATUSMESSAGE");
             e.Property(x => x.CancelReason).HasColumnName("CANCELREASON");

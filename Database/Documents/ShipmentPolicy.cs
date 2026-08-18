@@ -22,9 +22,35 @@ public sealed class ShipmentPolicy : IShipmentPolicy
     public PolicyResult CanEdit(ShipmentRow shipment) =>
         Require(shipment, "แก้ไข", ShipmentStatus.Draft, ShipmentStatus.Confirmed);
 
-    /// <summary>TmsStore.ConfirmManifest — draft only.</summary>
-    public PolicyResult CanConfirm(ShipmentRow shipment) =>
-        Require(shipment, "ยืนยัน", ShipmentStatus.Draft);
+    /// <summary>
+    /// TmsStore.ConfirmManifest — draft, and only once it has a truck.
+    ///
+    /// The second half is the interesting one. A manifest cut from a plan starts
+    /// with no vehicle, driver or run: planning decides <i>what</i> ships, the
+    /// dispatcher decides <i>on what</i>. Confirming before that hands the
+    /// warehouse a document nobody can drive, so it is refused as
+    /// <see cref="RefusalKind.Incomplete"/> rather than as a wrong state — the
+    /// document is not in the wrong place in its life, it is simply not finished.
+    /// </summary>
+    public PolicyResult CanConfirm(ShipmentRow shipment)
+    {
+        var state = Require(shipment, "ยืนยัน", ShipmentStatus.Draft);
+        if (!state.IsAllowed) return state;
+
+        return IsAssigned(shipment)
+            ? PolicyResult.Allow()
+            : PolicyResult.Incomplete("ยืนยันไม่ได้ — ต้องระบุรถ พนักงานขับรถ และสายส่งก่อน");
+    }
+
+    /// <summary>
+    /// The confirm gate, as <c>Manifest.IsAssigned()</c> states it for the
+    /// client: a driver, a plate and a run. Asked of the row here so the rule
+    /// is enforced where it is decided rather than where it is displayed.
+    /// </summary>
+    private static bool IsAssigned(ShipmentRow shipment) =>
+        !string.IsNullOrWhiteSpace(shipment.DriverKey)
+        && !string.IsNullOrWhiteSpace(shipment.LicensePlate)
+        && !string.IsNullOrWhiteSpace(shipment.Route);
 
     /// <summary>
     /// TmsStore.SendManifest — confirmed, or error, which is a resend after MMX

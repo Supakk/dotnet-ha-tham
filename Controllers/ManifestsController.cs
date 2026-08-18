@@ -97,9 +97,31 @@ public sealed class ManifestsController(TmsStore store, DocumentReadQueries? rea
     public ActionResult<Manifest> Update(string id, [FromBody] ManifestInput input) =>
         store.UpdateManifest(id, input);
 
-    /// <summary>Draft → confirmed. The document is now final on the TMS side.</summary>
+    /// <summary>
+    /// Draft → confirmed. The document is now final on the TMS side.
+    ///
+    /// <b>If-Match is required</b>, as on invoicing: the value is the
+    /// <c>currentVersion</c> read off the manifest. A confirm is not reversible
+    /// from this screen, so confirming a version somebody has since edited is
+    /// exactly the write worth refusing.
+    ///
+    /// The status change lands in DOC_SHIPMENT_STATUS_LOG rather than the
+    /// document audit — see <see cref="ShipmentService.ConfirmAsync"/>.
+    /// </summary>
     [HttpPost("{id}/confirm")]
-    public ActionResult<Manifest> Confirm(string id) => store.ConfirmManifest(id);
+    public async Task<ActionResult<Manifest>> Confirm(
+        string id,
+        [FromServices] IShipmentService? shipments,
+        CancellationToken ct)
+    {
+        if (shipments is null || reads is null) return store.ConfirmManifest(id);
+
+        var ifMatch = Request.Headers.IfMatch.ToString();
+        await shipments.ConfirmAsync(id, ifMatch, ct);
+
+        var manifest = await reads.ManifestAsync(id, ct);
+        return manifest is null ? NotFound() : manifest;
+    }
 
     /// <summary>Confirmed → sent. Hands the load to MMX and locks the document.</summary>
     [HttpPost("{id}/send")]
