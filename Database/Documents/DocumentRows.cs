@@ -343,9 +343,15 @@ public sealed class ShipmentStatusLogRow
 
 // ── ตารางที่ TMS เป็นเจ้าของ · TMS-owned tables ─────────────────────────────
 //
-// ⚠ ยังไม่มีใน MMDEV — สร้างโดย migration 004–006 ที่ยังไม่ได้เขียน
-//    mapping ไว้ล่วงหน้าเพื่อให้ Phase 4 ต่อได้ทันที แต่ query ก่อนหน้านั้น
-//    จะได้ "Invalid object name" ซึ่งถูกต้องแล้ว — ไม่มีตารางก็ต้องไม่ทำงาน
+// migration 004–006 สร้างตารางทั้งสามแล้วและ apply ไปแล้ว
+//
+// ⚠ mapping ชุดนี้เคยเขียน "ล่วงหน้า" ก่อนที่ migration จะมีอยู่จริง จึงตั้งชื่อ
+//    คอลัมน์ตามที่คิดว่าจะเป็น ไม่ใช่ตามที่ script สร้างจริง — TMS_DOCUMENT_AUDIT
+//    ผิดไป 5 คอลัมน์ (แก้ตอน invoice slice) TMS_SHIPMENT_SEND_ATTEMPT ผิดทั้งชื่อ
+//    และรูปร่าง และ TMS_DOCUMENT_NUMBER ผิดที่ขอบเขตของ key
+//
+//    ตั้งแต่นี้ไป: ตารางจริงคือของจริง เทียบกับ script ใน Database/Migrations
+//    ทีละคอลัมน์ก่อนแก้ไฟล์นี้
 
 /// <summary>
 /// TMS_SHIPMENT_SEND_ATTEMPT — one row per hand-off attempt to MMX.
@@ -361,8 +367,12 @@ public sealed class ShipmentSendAttemptRow
     public string WhseId { get; set; } = "";
     public string ShipmentKey { get; set; } = "";
 
-    /// <summary>1 for the first send, then 2, 3 … for each retry.</summary>
-    public int AttemptNumber { get; set; }
+    /// <summary>
+    /// ATTEMPTNO — 1 for the first send, then 2, 3 … for each retry. Unique per
+    /// shipment (UQ_TMS_SEND_ATTEMPT_NO) and >= 1 (CK_TMS_SEND_ATTEMPT_NO), which
+    /// is what makes "attempt 3" a fact rather than a label.
+    /// </summary>
+    public int AttemptNo { get; set; }
 
     /// <summary>New per attempt — what stops a repeated HTTP call being a repeated job.</summary>
     public string IdempotencyKey { get; set; } = "";
@@ -375,17 +385,63 @@ public sealed class ShipmentSendAttemptRow
 
     public string? RequestId { get; set; }
 
-    /// <summary>SEND_REQUESTED | SENDING | ACKED | SUCCESS | FAILED | TIMEOUT.</summary>
-    public string Outcome { get; set; } = "";
+    /// <summary>
+    /// STATUS — the attempt's own lifecycle state, constrained by
+    /// CK_TMS_SEND_ATTEMPT_STATUS to exactly the six values
+    /// <see cref="SendAttemptOutcome"/> declares.
+    /// </summary>
+    public string Status { get; set; } = "";
 
-    public DateTime CreatedAt { get; set; }
-    public string? CreatedBy { get; set; }
-    public DateTime? SentAt { get; set; }
-    public DateTime? ResponseAt { get; set; }
+    // ── the lifecycle, one timestamp per transition ─────────────────────────
+    //
+    // Migration 004 documents the state machine these four columns record:
+    //
+    //     SEND_REQUESTED -> SENDING -> ACKED -> SUCCESS
+    //                          |         |
+    //                          |         +-> (later callback) FAILED
+    //                          +-> TIMEOUT
+    //                          +-> FAILED
+    //
+    // The columns are that diagram made durable, and they are kept apart on
+    // purpose. An attempt that was acknowledged and then failed on a later
+    // callback has both an ACKEDAT and a FAILEDAT, and the gap between them is
+    // the thing worth knowing when MMX and TMS disagree about a load. A single
+    // "response at" would record only whichever came last and lose the rest.
 
-    public string? ErrorCode { get; set; }
-    public string? ErrorMessage { get; set; }
+    /// <summary>REQUESTEDAT — NOT NULL, defaulted: the attempt exists from here.</summary>
+    public DateTime RequestedAt { get; set; }
+
+    public string? RequestedBy { get; set; }
+
+    /// <summary>STARTEDAT — the hand-off began (SENDING).</summary>
+    public DateTime? StartedAt { get; set; }
+
+    /// <summary>ACKEDAT — MMX's first word, and the only thing that makes a shipment SENT.</summary>
+    public DateTime? AckedAt { get; set; }
+
+    /// <summary>COMPLETEDAT — the attempt settled successfully (SUCCESS).</summary>
+    public DateTime? CompletedAt { get; set; }
+
+    /// <summary>
+    /// FAILEDAT — the attempt settled as FAILED.
+    ///
+    /// Whether a TIMEOUT also stamps this is <b>not decided here and not decided
+    /// by the schema</b>: migration 004 is explicit that a timeout is not a
+    /// failure, because MMX may have taken the work and lost the reply. That is
+    /// a write-time rule for the Send slice to settle, not a mapping question.
+    /// </summary>
+    public DateTime? FailedAt { get; set; }
+
+    public string? LastErrorCode { get; set; }
+    public string? LastError { get; set; }
+
+    /// <summary>Whatever MMX sent back, kept whole.</summary>
     public string? ResponsePayload { get; set; }
+
+    // ADDDATE, ADDWHO, EDITDATE, EDITWHO and ROWVER exist on the table and are
+    // deliberately not mapped, as on the other rows here: nothing reads them
+    // yet, and the database fills or defaults every one. Map them when a
+    // mutation needs them rather than now.
 
     public ShipmentRow? Shipment { get; set; }
 }

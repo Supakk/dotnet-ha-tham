@@ -84,6 +84,13 @@ public static class ShipmentStatus
 /// MMX, and only then is the shipment <c>SENT</c>. <c>TIMEOUT</c> is not a
 /// failure — MMX may well have taken the work — so it leaves the shipment where
 /// it is and waits for a callback or a reconciliation.
+///
+/// These six values are exactly what <c>CK_TMS_SEND_ATTEMPT_STATUS</c> allows,
+/// and they are written to the column the table calls <c>STATUS</c> — mapped as
+/// <see cref="ShipmentSendAttemptRow.Status"/>. The type keeps the name
+/// "outcome" because that is what the domain calls it; the column keeps the name
+/// the schema gave it. Neither is a mistake, and the mapping is the one place
+/// they meet.
 /// </summary>
 public static class SendAttemptOutcome
 {

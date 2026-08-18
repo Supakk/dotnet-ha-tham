@@ -27,6 +27,9 @@ public static class DocumentModel
     private const string Qty = "decimal(18,3)";
     private const string LatLng = "decimal(11,7)";
 
+    /// <summary>The precision the TMS-owned tables declare for their timestamps.</summary>
+    private const string Stamp = "datetime2(3)";
+
     public static void Configure(ModelBuilder b)
     {
         ConfigurePlans(b);
@@ -314,10 +317,16 @@ public static class DocumentModel
     }
 
     /// <summary>
-    /// The three tables TMS owns. None exists in MMDEV yet — migrations 004–006
-    /// create them. Mapping them now costs nothing at runtime (EF only touches a
-    /// table when something queries it) and means Phase 4 has nothing left to
-    /// wire up.
+    /// The three tables TMS owns, as migrations 004–006 actually created them.
+    ///
+    /// This block was originally written before those scripts existed, from the
+    /// contracts rather than from the schema, and all three entities were wrong
+    /// in consequence — the audit table by five column names, the send attempt by
+    /// its names and its shape, the number table by the scope of its key. EF
+    /// validates none of this at startup: a wrong column name here is silent
+    /// until the first query, which is why they survived.
+    ///
+    /// Compare against Database/Migrations line by line before editing.
     /// </summary>
     private static void ConfigureTmsOwned(ModelBuilder b)
     {
@@ -329,17 +338,24 @@ public static class DocumentModel
             e.Property(x => x.SerialKey).HasColumnName("SERIALKEY").ValueGeneratedOnAdd();
             e.Property(x => x.WhseId).HasColumnName("WHSEID");
             e.Property(x => x.ShipmentKey).HasColumnName("SHIPMENTKEY");
-            e.Property(x => x.AttemptNumber).HasColumnName("ATTEMPTNUMBER");
+            e.Property(x => x.AttemptNo).HasColumnName("ATTEMPTNO");
             e.Property(x => x.IdempotencyKey).HasColumnName("IDEMPOTENCYKEY");
             e.Property(x => x.ExternalReference).HasColumnName("EXTERNALREFERENCE");
             e.Property(x => x.RequestId).HasColumnName("REQUESTID");
-            e.Property(x => x.Outcome).HasColumnName("OUTCOME");
-            e.Property(x => x.CreatedAt).HasColumnName("CREATEDAT");
-            e.Property(x => x.CreatedBy).HasColumnName("CREATEDBY");
-            e.Property(x => x.SentAt).HasColumnName("SENTAT");
-            e.Property(x => x.ResponseAt).HasColumnName("RESPONSEAT");
-            e.Property(x => x.ErrorCode).HasColumnName("ERRORCODE");
-            e.Property(x => x.ErrorMessage).HasColumnName("ERRORMESSAGE");
+            e.Property(x => x.Status).HasColumnName("STATUS");
+
+            // datetime2(3) on all six, as the script declares them. Letting EF
+            // send its default datetime2(7) would offer a precision the column
+            // cannot keep.
+            e.Property(x => x.RequestedAt).HasColumnName("REQUESTEDAT").HasColumnType(Stamp);
+            e.Property(x => x.RequestedBy).HasColumnName("REQUESTEDBY");
+            e.Property(x => x.StartedAt).HasColumnName("STARTEDAT").HasColumnType(Stamp);
+            e.Property(x => x.AckedAt).HasColumnName("ACKEDAT").HasColumnType(Stamp);
+            e.Property(x => x.CompletedAt).HasColumnName("COMPLETEDAT").HasColumnType(Stamp);
+            e.Property(x => x.FailedAt).HasColumnName("FAILEDAT").HasColumnType(Stamp);
+
+            e.Property(x => x.LastErrorCode).HasColumnName("LASTERRORCODE");
+            e.Property(x => x.LastError).HasColumnName("LASTERROR");
             e.Property(x => x.ResponsePayload).HasColumnName("RESPONSEPAYLOAD");
 
             e.HasOne(x => x.Shipment)
@@ -349,9 +365,15 @@ public static class DocumentModel
                 .OnDelete(DeleteBehavior.Restrict);
 
             // One attempt number per shipment, and one idempotency key in the
-            // whole table: both are what make a repeated call safe.
-            e.HasIndex(x => new { x.WhseId, x.ShipmentKey, x.AttemptNumber }).IsUnique();
-            e.HasIndex(x => x.IdempotencyKey).IsUnique();
+            // whole table: both are what make a repeated call safe. Named after
+            // the constraints the script creates, so the model and the database
+            // are recognisably talking about the same two rules.
+            e.HasIndex(x => new { x.WhseId, x.ShipmentKey, x.AttemptNo })
+                .HasDatabaseName("UQ_TMS_SEND_ATTEMPT_NO")
+                .IsUnique();
+            e.HasIndex(x => x.IdempotencyKey)
+                .HasDatabaseName("UQ_TMS_SEND_ATTEMPT_IDEMPOTENCY")
+                .IsUnique();
         });
 
         // Mapped against the table migration 005 created, column for column. The
@@ -377,7 +399,7 @@ public static class DocumentModel
             e.Property(x => x.Actor).HasColumnName("ACTOR");
             // datetime2(3) in the table; letting EF send the default datetime2(7)
             // precision would round-trip a value the column cannot hold exactly.
-            e.Property(x => x.ChangedAt).HasColumnName("CHANGEDAT").HasColumnType("datetime2(3)");
+            e.Property(x => x.ChangedAt).HasColumnName("CHANGEDAT").HasColumnType(Stamp);
             e.Property(x => x.Metadata).HasColumnName("METADATA");
 
             e.HasIndex(x => new { x.WhseId, x.DocumentType, x.DocumentKey, x.ChangedAt })
