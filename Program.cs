@@ -76,6 +76,11 @@ if (useDatabase)
     // The policy is stateless and has no dependencies, so it could be a
     // singleton — registered scoped anyway, because a reader should not have to
     // work out why one line in this block differs from the others.
+    // Numbering is global — one counter row per (prefix, period) for every
+    // warehouse — and the allocator joins whatever transaction its caller has
+    // open rather than owning one. Scoped so it shares the request's DbContext,
+    // which is what makes that possible.
+    builder.Services.AddScoped<IDocumentNumberAllocator, DocumentNumberAllocator>();
     builder.Services.AddScoped<IShipmentPolicy, ShipmentPolicy>();
     builder.Services.AddScoped<IShipmentRepository, ShipmentRepository>();
     builder.Services.AddScoped<IDocumentAuditWriter, DocumentAuditWriter>();
