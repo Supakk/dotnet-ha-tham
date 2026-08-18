@@ -8,21 +8,16 @@ namespace Mammod.Database.Documents;
 /// Orchestration for แผนขนส่ง: open a transaction, take a number, insert the
 /// document, write the audit, commit.
 ///
-/// <b>Only <see cref="CreateAsync"/> is implemented.</b> Creating a plan was
-/// chosen as the next slice because it is the smallest operation that consumes
-/// a document number, and consuming one is the thing that had never been
-/// exercised: the allocator can be reasoned about on its own, but only a real
-/// caller proves the number and the document commit or roll back together.
-///
-/// The rest of the interface throws rather than being written half-way. Issue in
-/// particular stays closed: it cuts a shipment from a plan, and a shipment that
-/// exists but can never be sent — MMX has no contract yet — is not a document
-/// anybody should be able to raise.
+/// Create, Update and SetStops are implemented. Issue and Cancel are not, and
+/// Issue in particular stays closed rather than merely unwritten: it cuts a
+/// shipment from a plan, and a shipment that exists but can never be sent — MMX
+/// has no contract yet — is not a document anybody should be able to raise.
 /// </summary>
 public sealed class TransportPlanService(
     AppDbContext db,
     ITransportPlanRepository plans,
     ITransportPlanPolicy policy,
+    IDeliveryOrderQuery orders,
     IDocumentNumberAllocator numbers,
     IDocumentAuditWriter audit,
     IWarehouseContext warehouse,
@@ -160,21 +155,19 @@ public sealed class TransportPlanService(
 
         // Moving a plan to another route strands whatever it is holding: the load
         // was gathered because the old route passes those zones. TmsStore handles
-        // that by returning the orders to the pool and emptying the plan — which
-        // is a line mutation, and how a line leaves a plan is exactly what is
-        // still undecided (a delete, or STATUS = CANCELLED; the filtered index
-        // UX_DOC_TRANSPORT_PLAN_LINE_ORDER permits either reading).
+        // that by silently returning the orders to the pool and emptying the plan.
         //
-        // So the route may move only while the plan is holding nothing. Refusing
-        // is not a new rule — it is declining an operation whose semantics have
-        // not been settled, and it keeps the invariant that comment is protecting
-        // rather than quietly breaking it.
+        // How a line leaves a plan is now settled — it is cancelled, not deleted —
+        // so this could be done. It still is not, and the reason is no longer
+        // technical: emptying a basket somebody spent time filling should be
+        // something they ask for, not something that happens because they changed
+        // a dropdown. Take the orders out through SetStops, then move the run.
         var liveLines = plan.Lines.Count(l => l.Status != PlanStatus.Cancelled);
         if (!string.Equals(route, plan.Route, StringComparison.OrdinalIgnoreCase) && liveLines > 0)
         {
             throw new DomainException(
-                $"เปลี่ยนสายส่งไม่ได้ตอนนี้ เพราะแผนถือใบสั่งส่งอยู่ {liveLines} รายการ — " +
-                "เอาใบสั่งส่งออกจากแผนก่อน แล้วจึงเปลี่ยนสายส่ง",
+                $"เปลี่ยนสายส่งไม่ได้ เพราะแผนถือใบสั่งส่งอยู่ {liveLines} รายการ " +
+                "ซึ่งเลือกมาตามสายเดิม — เอาใบสั่งส่งออกจากแผนก่อน แล้วจึงเปลี่ยนสายส่ง",
                 StatusCodes.Status409Conflict);
         }
 
@@ -240,6 +233,194 @@ public sealed class TransportPlanService(
     }
 
     /// <summary>
+    /// Makes the plan hold exactly these orders.
+    ///
+    /// Replace, not patch: the screen sends the tick-boxes as they now stand, so
+    /// anything absent from the list is being taken out. An order taken out has
+    /// its line cancelled rather than deleted, which is what returns it to the
+    /// pool — see <see cref="TransportPlanRepository.ReplaceLinesAsync"/> for why
+    /// that is the established reading rather than a choice made here.
+    ///
+    /// Everything is checked before anything is written. An order somebody else
+    /// has taken, or one in a zone this run never enters, refuses the whole call
+    /// — a partly-applied basket is worse than a rejected one, because the
+    /// planner cannot see which half landed.
+    /// </summary>
+    public async Task<TransportPlanRow> SetStopsAsync(
+        string planKey, IReadOnlyList<string> orderKeys, string ifMatch, CancellationToken ct = default)
+    {
+        var key = (planKey ?? "").Trim();
+        if (key.Length == 0)
+            throw new DomainException("ต้องระบุเลขที่แผนขนส่ง");
+
+        if (!DocumentIdentity.TryReadVersion(ifMatch, out var expected))
+        {
+            throw new DomainException(
+                "ต้องส่ง If-Match พร้อมเวอร์ชันของแผน (currentVersion ที่ได้จากการอ่านล่าสุด) — " +
+                "ไม่งั้นการบันทึกอาจทับสิ่งที่คนอื่นเพิ่งแก้ไป");
+        }
+
+        if (string.IsNullOrWhiteSpace(actor.CurrentUser))
+            throw new InvalidOperationException(
+                "ไม่ทราบผู้ทำรายการ — WarehouseMiddleware ต้องทำงานก่อน controller");
+
+        // The same order ticked twice is one order, as it has always been.
+        var wanted = (orderKeys ?? [])
+            .Select(o => (o ?? "").Trim())
+            .Where(o => o.Length > 0)
+            .Distinct(StringComparer.Ordinal)
+            .ToList();
+
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+
+        var plan = await plans.GetWithLinesAsync(key, ct)
+            ?? throw DomainException.NotFound($"ไม่พบแผนขนส่ง {key}");
+
+        var decision = policy.CanSetStops(plan);
+        if (!decision.IsAllowed)
+        {
+            throw new DomainException(decision.Message, decision.Kind == RefusalKind.Incomplete
+                ? StatusCodes.Status422UnprocessableEntity
+                : StatusCodes.Status409Conflict);
+        }
+
+        var held = plan.Lines
+            .Where(l => l.Status != PlanStatus.Cancelled)
+            .Select(l => l.OrderKey)
+            .ToHashSet(StringComparer.Ordinal);
+
+        var arriving = wanted.Where(o => !held.Contains(o)).ToList();
+
+        await RefuseUnavailableAsync(arriving, ct);
+        await RefuseOffRouteAsync(plan, wanted, ct);
+
+        // Touch the header so the version means something. Only the lines are
+        // really changing, and EF adds the ROWVER predicate to an UPDATE it is
+        // actually issuing — leave the plan row alone and If-Match would be read,
+        // checked against nothing, and quietly ignored.
+        var now = DateTime.UtcNow;
+        db.Entry(plan).Property(p => p.RowVer).OriginalValue = expected;
+        plan.EditDate = now;
+        plan.EditWho = actor.CurrentUser;
+
+        await plans.ReplaceLinesAsync(key, wanted, ct);
+
+        var live = plan.Lines.Where(l => l.Status != PlanStatus.Cancelled).ToList();
+        plan.TotalOrder = live.Count;
+
+        var removed = held.Where(o => !wanted.Contains(o, StringComparer.Ordinal)).OrderBy(o => o).ToList();
+
+        await audit.WriteAsync(new DocumentAuditRow
+        {
+            DocumentType = DocumentAuditWriter.PlanDocument,
+            DocumentKey = plan.PlanKey,
+            Action = AuditAction.Updated,
+            FromStatus = plan.Status,
+            ToStatus = plan.Status,
+            Actor = actor.CurrentUser,
+            RequestId = actor.RequestId,
+            ChangedAt = now,
+            Metadata = JsonSerializer.Serialize(new
+            {
+                change = "SET_STOPS",
+                added = arriving.OrderBy(o => o).ToList(),
+                removed,
+                totalOrder = live.Count,
+                warehouse = warehouse.CurrentWarehouseId,
+            }, AuditJson),
+        }, ct);
+
+        try
+        {
+            await db.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            await transaction.RollbackAsync(ct);
+            throw new ConcurrencyConflictException(
+                $"แผนขนส่ง {key} ถูกแก้ไขไปแล้วหลังจากที่คุณเปิดหน้านี้ — โหลดใหม่แล้วลองอีกครั้ง",
+                await CurrentVersionAsync(key, ct));
+        }
+
+        await transaction.CommitAsync(ct);
+        return plan;
+    }
+
+    /// <summary>
+    /// Refuses orders that are not free, naming them.
+    ///
+    /// Asked through <see cref="IDeliveryOrderQuery.FilterAvailableAsync"/>,
+    /// which is warehouse-scoped, so this one check covers three refusals at
+    /// once: an order that does not exist, one belonging to another site, and
+    /// one another plan or shipment already holds. All three are "you cannot
+    /// have this", and the caller does not need them told apart to act.
+    /// </summary>
+    private async Task RefuseUnavailableAsync(IReadOnlyList<string> arriving, CancellationToken ct)
+    {
+        if (arriving.Count == 0) return;
+
+        var free = (await orders.FilterAvailableAsync(arriving, ct)).ToHashSet(StringComparer.Ordinal);
+        var taken = arriving.Where(o => !free.Contains(o)).OrderBy(o => o).ToList();
+
+        if (taken.Count > 0)
+        {
+            throw new DomainException(
+                $"ใบสั่งส่ง {string.Join(", ", taken)} ไม่ว่างแล้ว — " +
+                "อาจถูกแผนหรือใบปิดบรรทุกอื่นรับไปก่อน หรือไม่ได้อยู่ในคลังนี้",
+                StatusCodes.Status409Conflict);
+        }
+    }
+
+    /// <summary>
+    /// Refuses orders in a zone the plan's run never enters.
+    ///
+    /// A lorry drives a line, not an area: the northern run reaches Phitsanulok
+    /// by way of Nakhon Sawan and Phichit, so all three are loadable onto it and
+    /// a zone it never passes is not. The rule is the one TmsStore has always
+    /// applied and the client's own tests assert; the zones come from
+    /// MST_ROUTE_ZONE, scoped to this warehouse.
+    /// </summary>
+    private async Task RefuseOffRouteAsync(
+        TransportPlanRow plan, IReadOnlyList<string> wanted, CancellationToken ct)
+    {
+        if (wanted.Count == 0 || string.IsNullOrWhiteSpace(plan.Route)) return;
+
+        var whse = warehouse.CurrentWarehouseId;
+        var reachable = await db.RouteZones
+            .AsNoTracking()
+            .Where(rz => rz.WhseId == whse && rz.Route == plan.Route)
+            .Select(rz => rz.ZoneKey)
+            .ToListAsync(ct);
+
+        // A run with no zones recorded is not evidence that nothing may ride it;
+        // it is missing master data, and refusing every order would be blaming
+        // the planner for it.
+        if (reachable.Count == 0) return;
+
+        var reach = reachable.ToHashSet(StringComparer.Ordinal);
+
+        var zones = await db.DeliveryOrders
+            .AsNoTracking()
+            .Where(o => o.WhseId == whse && wanted.Contains(o.OrderKey))
+            .Select(o => new { o.OrderKey, o.Zone })
+            .ToListAsync(ct);
+
+        var stray = zones
+            .Where(o => o.Zone is null || !reach.Contains(o.Zone))
+            .Select(o => o.OrderKey)
+            .OrderBy(o => o)
+            .ToList();
+
+        if (stray.Count > 0)
+        {
+            throw new DomainException(
+                $"ใบสั่งส่ง {string.Join(", ", stray)} อยู่ในโซนที่สาย {plan.Route} ไม่ได้วิ่งผ่าน — " +
+                "เลือกได้เฉพาะใบในโซนที่สายนี้ผ่าน หรือสร้างแผนของสายอื่นแยกอีกใบ",
+                StatusCodes.Status422UnprocessableEntity);
+        }
+    }
+
+    /// <summary>
     /// What the database holds now, read after the failed write rolled back.
     /// Untracked and re-queried: the tracked copy still carries the version the
     /// caller sent, which is the one value that is certainly not current.
@@ -267,10 +448,6 @@ public sealed class TransportPlanService(
     };
 
     // ── ยังไม่ได้ทำ · not implemented yet ──────────────────────────────────
-
-    public Task<TransportPlanRow> SetStopsAsync(
-        string planKey, IReadOnlyList<string> orderKeys, string ifMatch, CancellationToken ct = default) =>
-        throw new NotImplementedException("ยังไม่ได้ย้าย 'เลือกใบสั่งส่งเข้าแผน' มาที่ SQL — ยังใช้ TmsStore");
 
     /// <summary>
     /// Closed on purpose, not merely unwritten: issuing cuts a manifest, and a

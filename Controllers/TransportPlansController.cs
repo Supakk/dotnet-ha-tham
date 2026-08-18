@@ -140,8 +140,20 @@ public sealed class TransportPlansController(
     /// an order is only ever in one place.
     /// </summary>
     [HttpPut("{id}/stops")]
-    public ActionResult<TransportPlan> SetStops(string id, [FromBody] SetStopsRequest body) =>
-        store.SetPlanStops(id, body?.StopIds ?? []);
+    public async Task<ActionResult<TransportPlan>> SetStops(
+        string id,
+        [FromBody] SetStopsRequest body,
+        [FromServices] ITransportPlanService? plans,
+        CancellationToken ct)
+    {
+        if (plans is null || reads is null) return store.SetPlanStops(id, body?.StopIds ?? []);
+
+        var ifMatch = Request.Headers.IfMatch.ToString();
+        await plans.SetStopsAsync(id, body?.StopIds ?? [], ifMatch, ct);
+
+        var plan = await reads.PlanAsync(id, ct);
+        return plan is null ? NotFound() : plan;
+    }
 
     /// <summary>Cuts a draft manifest from the plan; the plan becomes `issued`.</summary>
     [HttpPost("{id}/issue")]

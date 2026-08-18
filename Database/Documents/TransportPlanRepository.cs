@@ -15,7 +15,7 @@ namespace Mammod.Database.Documents;
 /// nothing at all while still answering 200 — see the note on that class.
 /// </summary>
 public sealed class TransportPlanRepository(
-    AppDbContext db, IWarehouseContext warehouse) : ITransportPlanRepository
+    AppDbContext db, IWarehouseContext warehouse, IActorContext actor) : ITransportPlanRepository
 {
     private string Whse => warehouse.CurrentWarehouseId;
 
@@ -52,17 +52,84 @@ public sealed class TransportPlanRepository(
     }
 
     /// <summary>
-    /// Not implemented, and deliberately not guessed at.
+    /// Makes the plan hold exactly these orders, and nothing else.
     ///
-    /// <c>UX_DOC_TRANSPORT_PLAN_LINE_ORDER</c> is unique on ORDERKEY filtered to
-    /// <c>STATUS &lt;&gt; 'CANCELLED'</c>, which means dropping an order from a plan
-    /// is either a delete or a status change, and the two leave different
-    /// histories behind. Nothing in the schema or the contracts says which, and
-    /// picking one here would settle a rule that belongs to the SetStops slice.
+    /// <b>An order leaves a plan by having its line cancelled, never deleted.</b>
+    /// That is not a preference — it is what the rest of the system already
+    /// assumes. <c>UX_DOC_TRANSPORT_PLAN_LINE_ORDER</c> is unique on ORDERKEY
+    /// <i>filtered</i> to <c>STATUS &lt;&gt; 'CANCELLED'</c>, and a filter like that
+    /// only earns its keep if cancelled rows stay: delete on removal and a plain
+    /// unique index would do. <see cref="DeliveryOrderQuery"/> derives the
+    /// pending pool the same way and says so outright — "claimed means a row
+    /// whose own status is not CANCELLED, the same predicate as the two filtered
+    /// unique indexes, so this query and the database constraint can never
+    /// disagree". And the plan read filters <c>l.Status != CANCELLED</c>, which
+    /// would be dead code against a table that deletes.
+    ///
+    /// So returning an order to the pool is not an action anybody performs. It
+    /// is what cancelling the line <i>means</i>: the pool is a question, and a
+    /// cancelled line stops being an answer to it.
+    ///
+    /// <b>Re-adding revives.</b> The primary key is
+    /// <c>(WHSEID, PLANKEY, ORDERKEY)</c>, so a plan can never hold two rows for
+    /// one order — putting back something taken out earlier has to bring the
+    /// original row back to life rather than insert beside it. The history of
+    /// that order on this plan is one row, whatever it has been through.
     /// </summary>
-    public Task ReplaceLinesAsync(
-        string planKey, IReadOnlyList<string> orderKeys, CancellationToken ct = default) =>
-        throw new NotImplementedException(
-            "ยังไม่ได้ย้าย 'เลือกใบสั่งส่งเข้าแผน' มาที่ SQL — ยังใช้ TmsStore " +
-            "(ต้องตัดสินก่อนว่าการเอาออกจากแผนคือลบแถวหรือเปลี่ยนสถานะเป็น CANCELLED)");
+    public async Task ReplaceLinesAsync(
+        string planKey, IReadOnlyList<string> orderKeys, CancellationToken ct = default)
+    {
+        var plan = await GetWithLinesAsync(planKey, ct)
+            ?? throw new InvalidOperationException(
+                $"ReplaceLinesAsync เรียกกับแผนที่ไม่มีอยู่: {planKey}");
+
+        var wanted = new HashSet<string>(orderKeys, StringComparer.Ordinal);
+        var now = DateTime.UtcNow;
+        var who = actor.CurrentUser;
+
+        foreach (var line in plan.Lines)
+        {
+            var keep = wanted.Remove(line.OrderKey);
+
+            if (keep && line.Status == PlanStatus.Cancelled)
+            {
+                line.Status = LineActive;      // taken out earlier, put back now
+                Stamp(line, now, who);
+            }
+            else if (!keep && line.Status != PlanStatus.Cancelled)
+            {
+                line.Status = PlanStatus.Cancelled;
+                Stamp(line, now, who);
+            }
+        }
+
+        // Whatever is left never had a row on this plan at all.
+        foreach (var orderKey in wanted)
+        {
+            plan.Lines.Add(new TransportPlanLineRow
+            {
+                WhseId = Whse,
+                PlanKey = plan.PlanKey,
+                OrderKey = orderKey,
+                Status = LineActive,
+                AddDate = now,
+                AddWho = who,
+            });
+        }
+    }
+
+    /// <summary>
+    /// A live line. The document tables spell this <c>NEW</c> — it is what every
+    /// seeded DOC_SHIPMENT_DETAIL and DOC_SHIPMENT_STOP row carries — and there
+    /// is no check constraint narrowing it further. Only the distinction from
+    /// CANCELLED carries meaning: that is the predicate the filtered indexes, the
+    /// pool query and the read path all key on.
+    /// </summary>
+    private const string LineActive = "NEW";
+
+    private static void Stamp(TransportPlanLineRow line, DateTime now, string who)
+    {
+        line.EditDate = now;
+        line.EditWho = who;
+    }
 }
